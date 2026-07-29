@@ -28,6 +28,7 @@ body {
   font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  text-transform: uppercase;
 }
 
 /* Sidebar */
@@ -348,4 +349,4 @@ body {
   .sidebar { transform: translateX(-100%); }
   .sidebar.show { transform: translateX(0); }
   .main-content { margin-left: 0; padding: 16px; }
-  }
+}
