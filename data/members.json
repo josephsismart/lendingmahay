@@ -1,1 +1,57 @@
-[]
+[
+  {
+    "id": "m1",
+    "firstName": "Maria",
+    "middleName": "Santos",
+    "lastName": "Dela Cruz",
+    "extension": "",
+    "birthdate": "1990-03-15",
+    "address": "Brgy. San Isidro, Legazpi City, Albay",
+    "photo": "",
+    "createdAt": "2024-01-10T08:00:00Z"
+  },
+  {
+    "id": "m2",
+    "firstName": "Juan",
+    "middleName": "Reyes",
+    "lastName": "Garcia",
+    "extension": "Jr.",
+    "birthdate": "1985-07-22",
+    "address": "Brgy. Tahao, Daraga, Albay",
+    "photo": "",
+    "createdAt": "2024-02-05T09:30:00Z"
+  },
+  {
+    "id": "m3",
+    "firstName": "Ana",
+    "middleName": "Lopez",
+    "lastName": "Bautista",
+    "extension": "",
+    "birthdate": "1992-11-08",
+    "address": "Brgy. Sabang, Naga City, Camarines Sur",
+    "photo": "",
+    "createdAt": "2024-03-12T10:00:00Z"
+  },
+  {
+    "id": "m4",
+    "firstName": "Pedro",
+    "middleName": "Cruz",
+    "lastName": "Mendoza",
+    "extension": "",
+    "birthdate": "1988-05-30",
+    "address": "Brgy. Bagumbayan, Tabaco City, Albay",
+    "photo": "",
+    "createdAt": "2024-04-01T07:45:00Z"
+  },
+  {
+    "id": "m5",
+    "firstName": "Elena",
+    "middleName": "Ramos",
+    "lastName": "Villanueva",
+    "extension": "",
+    "birthdate": "1995-09-18",
+    "address": "Brgy. Centro, Ligao City, Albay",
+    "photo": "",
+    "createdAt": "2024-05-20T11:00:00Z"
+  }
+]
