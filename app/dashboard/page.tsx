@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 
 interface Member {
@@ -10,6 +11,8 @@ interface Member {
   birthdate: string;
   address: string;
   photo: string;
+  shares: number;
+  createdAt: string;
 }
 
 interface Payment {
@@ -21,705 +24,1302 @@ interface Payment {
 interface Loan {
   id: string;
   memberId: string;
+  borrowerType: "member" | "non-member";
+  borrowerName: string;
+  taggedMemberId: string;
   amount: number;
   borrowDate: string;
   interestStartDate: string;
   signature: string;
-  status: string;
+  status: "active" | "paid";
   payments: Payment[];
-  months?: number;
-  totalDue?: number;
-  totalPaid?: number;
-  balance?: number;
+  totalDue: number;
+  interestAmount: number;
+  months: number;
+  balance: number;
+  totalPaid: number;
+  createdAt: string;
 }
 
-interface Transaction {
-  id: string;
-  type: "income" | "expense";
-  category: string;
-  description: string;
-  amount: number;
-  date: string;
-}
+type Page = "dashboard" | "shareholders" | "loans" | "accounting";
 
-type Page = "dashboard" | "members" | "loans" | "accounting";
+const SHARE_VALUE = 1000;
+
+function formatPeso(amount: number): string {
+  return "₱" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 export default function DashboardPage() {
-  const [page, setPage] = useState<Page>("dashboard");
+  const [currentPage, setCurrentPage] = useState<Page>("dashboard");
   const [members, setMembers] = useState<Member[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Transaction state (client-side)
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: "t1", type: "income", category: "Loan Payment", description: "Maria Dela Cruz - March payment", amount: 3000, date: "2025-03-15" },
-    { id: "t2", type: "income", category: "Loan Payment", description: "Juan Garcia - April payment", amount: 5000, date: "2025-04-01" },
-    { id: "t3", type: "expense", category: "Operating", description: "Office supplies and printing", amount: 1500, date: "2025-03-20" },
-    { id: "t4", type: "income", category: "Interest", description: "Monthly interest collection", amount: 2500, date: "2025-04-15" },
-    { id: "t5", type: "expense", category: "Transport", description: "Collection route gasoline", amount: 800, date: "2025-04-10" },
-    { id: "t6", type: "income", category: "Loan Payment", description: "Ana Bautista - Final payment", amount: 4500, date: "2025-02-01" },
-  ]);
-
-  // Member modal
+  // Member modal state
   const [showMemberModal, setShowMemberModal] = useState(false);
-  const [editMember, setEditMember] = useState<Member | null>(null);
-  const [mForm, setMForm] = useState({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [memberForm, setMemberForm] = useState({
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    extension: "",
+    birthdate: "",
+    address: "",
+    photo: "",
+    shares: 1,
+  });
 
-  // Loan modal
+  // Loan modal state
   const [showLoanModal, setShowLoanModal] = useState(false);
-  const [lForm, setLForm] = useState({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
+  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
+  const [loanForm, setLoanForm] = useState({
+    borrowerType: "member" as "member" | "non-member",
+    memberId: "",
+    borrowerName: "",
+    taggedMemberId: "",
+    amount: 0,
+    borrowDate: new Date().toISOString().split("T")[0],
+    interestStartDate: new Date().toISOString().split("T")[0],
+    signature: "",
+  });
 
-  // Payment modal
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [payLoan, setPayLoan] = useState<Loan | null>(null);
-  const [payAmount, setPayAmount] = useState("");
-  const [payDate, setPayDate] = useState("");
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentLoanId, setPaymentLoanId] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState(0);
 
-  // Transaction modal
-  const [showTxModal, setShowTxModal] = useState(false);
-  const [txForm, setTxForm] = useState({ type: "income" as "income" | "expense", category: "", description: "", amount: "", date: "" });
+  // Camera state
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
-  // Signature
-  const sigCanvas = useRef<HTMLCanvasElement>(null);
-  const [drawing, setDrawing] = useState(false);
+  // Signature pad state
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const [mRes, lRes] = await Promise.all([fetch("/api/members"), fetch("/api/loans")]);
-      if (mRes.ok) setMembers(await mRes.json());
-      if (lRes.ok) setLoans(await lRes.json());
-    } catch (e) {
-      console.error("Fetch error:", e);
+      const [membersRes, loansRes] = await Promise.all([
+        fetch("/api/members"),
+        fetch("/api/loans"),
+      ]);
+      const membersData = await membersRes.json();
+      const loansData = await loansRes.json();
+      setMembers(Array.isArray(membersData) ? membersData : []);
+      setLoans(Array.isArray(loansData) ? loansData : []);
+    } catch (err) {
+      console.error("FAILED TO FETCH DATA:", err);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  // Photo handler
-  const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setMForm({ ...mForm, photo: reader.result as string });
-    reader.readAsDataURL(file);
+  // Camera functions
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      setCameraStream(stream);
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (err) {
+      console.error("CAMERA ERROR:", err);
+      alert("FAILED TO ACCESS CAMERA. PLEASE ALLOW CAMERA PERMISSIONS.");
+    }
   };
 
-  // Signature drawing
-  const startDraw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setDrawing(true);
-    const ctx = sigCanvas.current?.getContext("2d");
-    if (ctx) { ctx.beginPath(); ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY); }
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(videoRef.current, 0, 0);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      setMemberForm((prev) => ({ ...prev, photo: dataUrl }));
+    }
+    stopCamera();
   };
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawing) return;
-    const ctx = sigCanvas.current?.getContext("2d");
-    if (ctx) { ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY); ctx.stroke(); }
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      setCameraStream(null);
+    }
+    setCameraActive(false);
   };
-  const endDraw = () => setDrawing(false);
-  const clearSig = () => {
-    const ctx = sigCanvas.current?.getContext("2d");
-    if (ctx && sigCanvas.current) ctx.clearRect(0, 0, sigCanvas.current.width, sigCanvas.current.height);
+
+  // Signature pad functions
+  const initSignaturePad = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+  };
+
+  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    if ("touches" in e) {
+      return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+    }
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const { x, y } = getCanvasCoords(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const { x, y } = getCanvasCoords(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    setIsDrawing(false);
+  };
+
+  const clearSignature = () => {
+    initSignaturePad();
+  };
+
+  const saveSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvas.toDataURL("image/png");
+    setLoanForm((prev) => ({ ...prev, signature: dataUrl }));
   };
 
   // Member CRUD
-  const saveMember = async () => {
-    const method = editMember ? "PUT" : "POST";
-    const body = editMember ? { ...mForm, id: editMember.id } : mForm;
-    await fetch("/api/members", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setShowMemberModal(false);
-    setEditMember(null);
-    setMForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
-    fetchData();
-  };
-  const openEditMember = (m: Member) => {
-    setEditMember(m);
-    setMForm({ firstName: m.firstName, middleName: m.middleName, lastName: m.lastName, extension: m.extension, birthdate: m.birthdate, address: m.address, photo: m.photo });
+  const openAddMember = () => {
+    setEditingMember(null);
+    setMemberForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "", shares: 1 });
     setShowMemberModal(true);
   };
+
+  const openEditMember = (member: Member) => {
+    setEditingMember(member);
+    setMemberForm({
+      firstName: member.firstName,
+      middleName: member.middleName,
+      lastName: member.lastName,
+      extension: member.extension,
+      birthdate: member.birthdate,
+      address: member.address,
+      photo: member.photo,
+      shares: member.shares,
+    });
+    setShowMemberModal(true);
+  };
+
+  const saveMember = async () => {
+    try {
+      if (editingMember) {
+        await fetch("/api/members", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingMember.id, ...memberForm }),
+        });
+      } else {
+        await fetch("/api/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(memberForm),
+        });
+      }
+      setShowMemberModal(false);
+      stopCamera();
+      await fetchData();
+    } catch (err) {
+      console.error("SAVE MEMBER ERROR:", err);
+      alert("FAILED TO SAVE MEMBER");
+    }
+  };
+
   const deleteMember = async (id: string) => {
-    if (!confirm("Delete this member?")) return;
-    await fetch("/api/members", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    fetchData();
+    if (!confirm("ARE YOU SURE YOU WANT TO DELETE THIS SHAREHOLDER?")) return;
+    try {
+      await fetch("/api/members", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await fetchData();
+    } catch (err) {
+      console.error("DELETE MEMBER ERROR:", err);
+      alert("FAILED TO DELETE MEMBER");
+    }
   };
 
   // Loan CRUD
+  const openAddLoan = () => {
+    setEditingLoan(null);
+    setLoanForm({
+      borrowerType: "member",
+      memberId: "",
+      borrowerName: "",
+      taggedMemberId: "",
+      amount: 0,
+      borrowDate: new Date().toISOString().split("T")[0],
+      interestStartDate: new Date().toISOString().split("T")[0],
+      signature: "",
+    });
+    setShowLoanModal(true);
+  };
+
+  const openEditLoan = (loan: Loan) => {
+    setEditingLoan(loan);
+    setLoanForm({
+      borrowerType: loan.borrowerType,
+      memberId: loan.memberId,
+      borrowerName: loan.borrowerName,
+      taggedMemberId: loan.taggedMemberId,
+      amount: loan.amount,
+      borrowDate: loan.borrowDate,
+      interestStartDate: loan.interestStartDate,
+      signature: loan.signature,
+    });
+    setShowLoanModal(true);
+  };
+
   const saveLoan = async () => {
-    const sig = sigCanvas.current?.toDataURL() || "";
-    await fetch("/api/loans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...lForm, signature: sig }),
-    });
-    setShowLoanModal(false);
-    setLForm({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
-    fetchData();
+    saveSignature();
+    try {
+      const payload = { ...loanForm };
+      if (loanForm.borrowerType === "member") {
+        const member = members.find((m) => m.id === loanForm.memberId);
+        if (member) {
+          payload.borrowerName = `${member.firstName} ${member.middleName} ${member.lastName} ${member.extension}`.trim();
+        }
+      }
+      if (editingLoan) {
+        await fetch("/api/loans", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingLoan.id, ...payload }),
+        });
+      } else {
+        await fetch("/api/loans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+      setShowLoanModal(false);
+      await fetchData();
+    } catch (err) {
+      console.error("SAVE LOAN ERROR:", err);
+      alert("FAILED TO SAVE LOAN");
+    }
   };
-  const makePayment = async () => {
-    if (!payLoan) return;
-    await fetch("/api/loans", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: payLoan.id, action: "pay", paymentAmount: payAmount, paymentDate: payDate }),
-    });
-    setShowPayModal(false);
-    setPayLoan(null);
-    setPayAmount("");
-    setPayDate("");
-    fetchData();
-  };
-  const markPaid = async (id: string) => {
-    if (!confirm("Mark this loan as fully paid?")) return;
-    await fetch("/api/loans", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "markPaid" }) });
-    fetchData();
-  };
+
   const deleteLoan = async (id: string) => {
-    if (!confirm("Delete this loan?")) return;
-    await fetch("/api/loans", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    fetchData();
+    if (!confirm("ARE YOU SURE YOU WANT TO DELETE THIS LOAN?")) return;
+    try {
+      await fetch("/api/loans", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      await fetchData();
+    } catch (err) {
+      console.error("DELETE LOAN ERROR:", err);
+      alert("FAILED TO DELETE LOAN");
+    }
   };
 
-  // Accounting
-  const saveTx = () => {
-    const tx: Transaction = {
-      id: Date.now().toString(36),
-      type: txForm.type,
-      category: txForm.category,
-      description: txForm.description,
-      amount: Number(txForm.amount),
-      date: txForm.date,
-    };
-    setTransactions([tx, ...transactions]);
-    setShowTxModal(false);
-    setTxForm({ type: "income", category: "", description: "", amount: "", date: "" });
-  };
-  const deleteTx = (id: string) => {
-    setTransactions(transactions.filter((t) => t.id !== id));
-  };
-
-  const getMemberName = (id: string) => {
-    const m = members.find((x) => x.id === id);
-    return m ? `${m.firstName} ${m.lastName}` : "Unknown";
+  const recordPayment = async () => {
+    if (paymentAmount <= 0) {
+      alert("PLEASE ENTER A VALID PAYMENT AMOUNT");
+      return;
+    }
+    try {
+      await fetch("/api/loans", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: paymentLoanId, action: "pay", amount: paymentAmount }),
+      });
+      setShowPaymentModal(false);
+      setPaymentAmount(0);
+      await fetchData();
+    } catch (err) {
+      console.error("PAYMENT ERROR:", err);
+      alert("FAILED TO RECORD PAYMENT");
+    }
   };
 
+  const markLoanPaid = async (id: string) => {
+    if (!confirm("MARK THIS LOAN AS FULLY PAID?")) return;
+    try {
+      await fetch("/api/loans", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "markPaid" }),
+      });
+      await fetchData();
+    } catch (err) {
+      console.error("MARK PAID ERROR:", err);
+      alert("FAILED TO MARK LOAN AS PAID");
+    }
+  };
+
+  // Computed stats
+  const totalShares = members.reduce((sum, m) => sum + m.shares, 0);
+  const totalShareValue = totalShares * SHARE_VALUE;
   const activeLoans = loans.filter((l) => l.status === "active");
-  const totalLent = loans.reduce((s, l) => s + l.amount, 0);
-  const totalBalance = activeLoans.reduce((s, l) => s + (l.balance || 0), 0);
-  const totalCollected = loans.reduce((s, l) => s + (l.totalPaid || 0), 0);
+  const totalBalanceDue = activeLoans.reduce((sum, l) => sum + l.balance, 0);
+  const totalCollected = loans.reduce((sum, l) => sum + l.totalPaid, 0);
+  const totalLent = loans.reduce((sum, l) => sum + l.amount, 0);
+  const totalInterestEarned = loans.reduce((sum, l) => sum + l.interestAmount, 0);
+  const outstandingBalance = loans.filter((l) => l.status === "active").reduce((sum, l) => sum + l.balance, 0);
 
-  const totalIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-  const netIncome = totalIncome - totalExpense;
+  const getMemberName = (id: string): string => {
+    const m = members.find((mem) => mem.id === id);
+    if (!m) return "UNKNOWN";
+    return `${m.firstName} ${m.middleName} ${m.lastName} ${m.extension}`.trim().toUpperCase();
+  };
 
-  const fmt = (n: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
+  // Navigation items
+  const navItems: { page: Page; icon: string; label: string }[] = [
+    { page: "dashboard", icon: "fa-tachometer-alt", label: "DASHBOARD" },
+    { page: "shareholders", icon: "fa-users", label: "SHAREHOLDERS" },
+    { page: "loans", icon: "fa-hand-holding-usd", label: "LOANS" },
+    { page: "accounting", icon: "fa-calculator", label: "ACCOUNTING" },
+  ];
 
-  return (
-    <div>
-      {/* Sidebar */}
-      <div className={`sidebar ${sidebarOpen ? "show" : ""}`}>
-        <div className="sidebar-brand">
-          <i className="fas fa-hand-holding-usd"></i>LendingMahay
+  // Render sidebar
+  const renderSidebar = () => (
+    <div className={`sidebar ${sidebarOpen ? "" : "collapsed"}`} style={{ width: sidebarOpen ? 250 : 0, minHeight: "100vh", position: "fixed", left: 0, top: 0, zIndex: 1000, transition: "width 0.3s", overflow: "hidden" }}>
+      <div className="sidebar-brand p-3 text-center">
+        <h4 className="text-white mb-0">
+          <i className="fas fa-landmark me-2"></i>
+          LENDINGMAHAY
+        </h4>
+        <small className="text-white-50">LENDING MANAGEMENT SYSTEM</small>
+      </div>
+      <hr className="bg-light mx-3 my-2" />
+      <nav className="nav flex-column px-2">
+        {navItems.map((item) => (
+          <button
+            key={item.page}
+            className={`nav-link text-start border-0 rounded px-3 py-2 mb-1 ${currentPage === item.page ? "active bg-white bg-opacity-25 text-white fw-bold" : "text-white-50"}`}
+            style={{ background: currentPage === item.page ? "rgba(255,255,255,0.15)" : "transparent", cursor: "pointer" }}
+            onClick={() => setCurrentPage(item.page)}
+          >
+            <i className={`fas ${item.icon} me-2`} style={{ width: 20, textAlign: "center" }}></i>
+            {item.label}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+
+  // Render top bar
+  const renderTopBar = () => (
+    <div className="top-bar d-flex align-items-center justify-content-between px-4 py-3 bg-white shadow-sm" style={{ marginLeft: sidebarOpen ? 250 : 0, transition: "margin-left 0.3s" }}>
+      <div className="d-flex align-items-center">
+        <button className="btn btn-outline-secondary me-3 d-md-none" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <i className="fas fa-bars"></i>
+        </button>
+        <h5 className="mb-0 fw-bold text-uppercase">
+          {currentPage === "shareholders" ? "SHAREHOLDERS" : currentPage.toUpperCase()}
+        </h5>
+      </div>
+      <div className="d-flex align-items-center">
+        <span className="text-muted me-3">
+          <i className="fas fa-calendar me-1"></i>
+          {new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }).toUpperCase()}
+        </span>
+        <div className="d-flex align-items-center">
+          <div className="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white" style={{ width: 36, height: 36 }}>
+            <i className="fas fa-user"></i>
+          </div>
+          <span className="ms-2 fw-semibold">ADMIN</span>
         </div>
-        <nav className="nav flex-column mt-2">
-          <a className={`nav-link ${page === "dashboard" ? "active" : ""}`} href="#" onClick={() => { setPage("dashboard"); setSidebarOpen(false); }}>
-            <i className="fas fa-th-large"></i>Dashboard
-          </a>
-          <a className={`nav-link ${page === "members" ? "active" : ""}`} href="#" onClick={() => { setPage("members"); setSidebarOpen(false); }}>
-            <i className="fas fa-users"></i>Members
-          </a>
-          <a className={`nav-link ${page === "loans" ? "active" : ""}`} href="#" onClick={() => { setPage("loans"); setSidebarOpen(false); }}>
-            <i className="fas fa-file-invoice-dollar"></i>Loans
-          </a>
-          <a className={`nav-link ${page === "accounting" ? "active" : ""}`} href="#" onClick={() => { setPage("accounting"); setSidebarOpen(false); }}>
-            <i className="fas fa-calculator"></i>Accounting
-          </a>
-        </nav>
+      </div>
+    </div>
+  );
+
+  // Render Dashboard
+  const renderDashboard = () => (
+    <div>
+      <div className="row g-4 mb-4">
+        <div className="col-md-6 col-lg-3">
+          <div className="stat-card card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center">
+              <div className="icon-box icon-purple me-3">
+                <i className="fas fa-users"></i>
+              </div>
+              <div>
+                <div className="text-muted small">SHAREHOLDERS</div>
+                <h3 className="mb-0 fw-bold">{members.length}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="stat-card card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center">
+              <div className="icon-box icon-orange me-3">
+                <i className="fas fa-coins"></i>
+              </div>
+              <div>
+                <div className="text-muted small">TOTAL SHARES</div>
+                <h3 className="mb-0 fw-bold">{totalShares} ({formatPeso(totalShareValue)})</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="stat-card card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center">
+              <div className="icon-box icon-green me-3">
+                <i className="fas fa-hand-holding-usd"></i>
+              </div>
+              <div>
+                <div className="text-muted small">ACTIVE LOANS</div>
+                <h3 className="mb-0 fw-bold">{activeLoans.length}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="stat-card card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center">
+              <div className="icon-box icon-red me-3">
+                <i className="fas fa-exclamation-triangle"></i>
+              </div>
+              <div>
+                <div className="text-muted small">TOTAL BALANCE DUE</div>
+                <h3 className="mb-0 fw-bold">{formatPeso(totalBalanceDue)}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="row g-4">
+        <div className="col-md-6 col-lg-3">
+          <div className="stat-card card border-0 shadow-sm h-100">
+            <div className="card-body d-flex align-items-center">
+              <div className="icon-box icon-blue me-3">
+                <i className="fas fa-check-circle"></i>
+              </div>
+              <div>
+                <div className="text-muted small">TOTAL COLLECTED</div>
+                <h3 className="mb-0 fw-bold">{formatPeso(totalCollected)}</h3>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div className="main-content">
-        <div className="top-bar">
-          <div>
-            <button className="btn btn-outline-secondary d-md-none me-2" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ border: "none", padding: "4px 8px" }}>
-              <i className="fas fa-bars"></i>
-            </button>
-            <span className="section-title text-capitalize">{page}</span>
-          </div>
-          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-            <i className="fas fa-circle me-1" style={{ fontSize: "8px", color: "var(--success)" }}></i>Online
-          </div>
-        </div>
-
-        {/* DASHBOARD */}
-        {page === "dashboard" && (
-          <div>
-            <div className="row g-3 mb-4">
-              {[
-                { label: "Members", value: members.length, icon: "fas fa-users", cls: "icon-purple" },
-                { label: "Active Loans", value: activeLoans.length, icon: "fas fa-file-invoice-dollar", cls: "icon-orange" },
-                { label: "Total Balance", value: fmt(totalBalance), icon: "fas fa-peso-sign", cls: "icon-red" },
-                { label: "Collected", value: fmt(totalCollected), icon: "fas fa-coins", cls: "icon-green" },
-              ].map((s, i) => (
-                <div className="col-md-3 col-6" key={i}>
-                  <div className="card stat-card">
-                    <div className="card-body d-flex align-items-center">
-                      <div className={`icon-box ${s.cls} me-3`}>
-                        <i className={s.icon}></i>
-                      </div>
-                      <div>
-                        <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", fontWeight: 500 }}>{s.label}</div>
-                        <div style={{ fontWeight: 700, fontSize: "1.15rem" }}>{s.value}</div>
-                      </div>
-                    </div>
-                  </div>
+      <div className="row g-4 mt-2">
+        <div className="col-lg-6">
+          <div className="table-card card border-0 shadow-sm">
+            <div className="card-header bg-white border-0 pt-3 px-3">
+              <h6 className="fw-bold mb-0">RECENT SHAREHOLDERS</h6>
+            </div>
+            <div className="card-body p-0">
+              {members.length === 0 ? (
+                <div className="empty-state text-center py-5 text-muted">
+                  <i className="fas fa-users fa-3x mb-3"></i>
+                  <p>NO SHAREHOLDERS YET</p>
                 </div>
-              ))}
-     </div>
-
-            <div className="row g-3">
-              <div className="col-md-7">
-                <div className="card table-card">
-                  <div className="card-header">
-                    <i className="fas fa-clock me-2" style={{ color: "var(--accent)" }}></i>Recent Active Loans
-                  </div>
-                  <div className="card-body p-0">
-                    <div className="table-responsive">
-                      <table className="table mb-0">
-                        <thead><tr><th>Borrower</th><th>Principal</th><th>Balance</th><th>Months</th></tr></thead>
-                        <tbody>
-                          {activeLoans.slice(0, 5).map((l) => (
-                            <tr key={l.id}>
-                              <td style={{ fontWeight: 600 }}>{getMemberName(l.memberId)}</td>
-                              <td>{fmt(l.amount)}</td>
-                              <td style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(l.balance || 0)}</td>
-                              <td><span className="badge-active">{l.months?.toFixed(1)} mo</span></td>
-                            </tr>
-                          ))}
-                          {activeLoans.length === 0 && <tr><td colSpan={4} className="text-center py-4" style={{ color: "var(--text-muted)" }}>No active loans yet</td></tr>}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-5">
-                <div className="card table-card">
-                  <div className="card-header">
-                    <i className="fas fa-chart-pie me-2" style={{ color: "var(--primary)" }}></i>Financial Summary
-                  </div>
-                  <div className="card-body">
-                    {[
-                      { label: "Total Lent Out", value: fmt(totalLent), color: "var(--text-primary)" },
-                      { label: "Interest Earned", value: fmt(totalBalance - totalLent + totalCollected), color: "var(--success)" },
-                      { label: "Total Collected", value: fmt(totalCollected), color: "var(--primary)" },
-                      { label: "Outstanding", value: fmt(totalBalance), color: "var(--danger)" },
-                    ].map((r, i) => (
-                      <div className="summary-row" key={i}>
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{r.label}</span>
-                        <span style={{ fontWeight: 700, color: r.color }}>{r.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MEMBERS */}
-        {page === "members" && (
-          <div>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <span className="section-title"><i className="fas fa-users me-2" style={{ color: "var(--primary)" }}></i>Members ({members.length})</span>
-              <button className="btn btn-primary" onClick={() => { setEditMember(null); setMForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" }); setShowMemberModal(true); }}>
-                <i className="fas fa-plus me-1"></i>Add Member
-              </button>
-            </div>
-            <div className="card table-card">
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead><tr><th>Photo</th><th>Name</th><th>Birthdate</th><th>Address</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id}>
-                        <td>
-                          {m.photo ? <img src={m.photo} className="profile-photo" alt="" /> :
-                            <div className="profile-photo d-flex align-items-center justify-content-center" style={{ background: "var(--primary-soft)", color: "var(--primary)", fontSize: "1rem" }}>
-                              <i className="fas fa-user"></i>
-                            </div>}
-                        </td>
-                        <td style={{ fontWeight: 600 }}>{m.firstName} {m.middleName} {m.lastName} {m.extension}</td>
-                        <td>{m.birthdate}</td>
-                        <td style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{m.address}</td>
-                        <td>
-                          <button className="btn btn-sm btn-outline-primary me-1" onClick={() => openEditMember(m)} title="Edit">
-                            <i className="fas fa-edit"></i>
-                          </button>
-                          <button className="btn btn-sm btn-outline-danger" onClick={() => deleteMember(m.id)} title="Delete">
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {members.length === 0 && (
-                      <tr><td colSpan={5}>
-                        <div className="empty-state">
-                          <div><i className="fas fa-user-plus"></i></div>
-                          <p>No members yet. Click &quot;Add Member&quot; to get started.</p>
-                        </div>
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* LOANS */}
-        {page === "loans" && (
-          <div>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <span className="section-title"><i className="fas fa-file-invoice-dollar me-2" style={{ color: "var(--accent)" }}></i>Loans ({loans.length})</span>
-              <button className="btn btn-primary" onClick={() => {
-                setLForm({ memberId: members[0]?.id || "", amount: "", borrowDate: new Date().toISOString().split("T")[0], interestStartDate: new Date().toISOString().split("T")[0], signature: "" });
-                setShowLoanModal(true);
-                setTimeout(() => { if (sigCanvas.current) { const ctx = sigCanvas.current.getContext("2d"); if (ctx) ctx.clearRect(0, 0, sigCanvas.current.width, sigCanvas.current.height); } }, 100);
-              }}>
-                <i className="fas fa-plus me-1"></i>New Loan
-              </button>
-            </div>
-            <div className="card table-card">
-              <div className="table-responsive">
-                <table className="table mb-0">
-                  <thead><tr><th>Borrower</th><th>Principal</th><th>Date</th><th>Months</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {loans.map((l) => (
-                      <tr key={l.id}>
-                        <td style={{ fontWeight: 600 }}>{getMemberName(l.memberId)}</td>
-                        <td>{fmt(l.amount)}</td>
-                        <td>{l.borrowDate}</td>
-                        <td>{l.months?.toFixed(1)}</td>
-                        <td>{fmt(l.totalDue || 0)}</td>
-                        <td style={{ color: "var(--success)" }}>{fmt(l.totalPaid || 0)}</td>
-                        <td style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(l.balance || 0)}</td>
-                        <td>
-                          <span className={l.status === "paid" ? "badge-paid" : "badge-active"}>
-                            {l.status === "paid" ? "Paid" : "Active"}
-                          </span>
-                        </td>
-                        <td>
-                          {l.status === "active" && <>
-                            <button className="btn btn-sm btn-outline-success me-1" title="Record Payment" onClick={() => { setPayLoan(l); setPayAmount(""); setPayDate(new Date().toISOString().split("T")[0]); setShowPayModal(true); }}>
-                              <i className="fas fa-money-bill-wave"></i>
-                            </button>
-                            <button className="btn btn-sm btn-outline-primary me-1" title="Mark Paid" onClick={() => markPaid(l.id)}>
-                              <i className="fas fa-check"></i>
-                            </button>
-                          </>}
-                          {l.signature && (
-                            <button className="btn btn-sm btn-outline-secondary me-1" title="View Signature" onClick={() => {
-                              const w = window.open("", "_blank", "width=400,height=300");
-                              if (w) { w.document.write(`<img src="${l.signature}" style="max-width:100%"/>`); }
-                            }}>
-                              <i className="fas fa-signature"></i>
-                            </button>
-                          )}
-                          <button className="btn btn-sm btn-outline-danger" title="Delete" onClick={() => deleteLoan(l.id)}>
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {loans.length === 0 && (
-                      <tr><td colSpan={9}>
-                        <div className="empty-state">
-                          <div><i className="fas fa-file-invoice-dollar"></i></div>
-                          <p>No loans yet.</p>
-                        </div>
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ACCOUNTING */}
-        {page === "accounting" && (
-          <div>
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <span className="section-title"><i className="fas fa-calculator me-2" style={{ color: "var(--info)" }}></i>Accounting</span>
-              <button className="btn btn-primary" onClick={() => { setTxForm({ type: "income", category: "", description: "", amount: "", date: new Date().toISOString().split("T")[0] }); setShowTxModal(true); }}>
-                <i className="fas fa-plus me-1"></i>New Transaction
-              </button>
-            </div>
-
-            <div className="row g-3 mb-4">
-              <div className="col-md-4">
-                <div className="accounting-card">
-                  <div className="d-flex align-items-center mb-2">
-                    <div className="icon-box icon-green me-3"><i className="fas fa-arrow-down"></i></div>
-                    <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Total Income</div>
-                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--success)" }}>{fmt(totalIncome)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="accounting-card">
-                  <div className="d-flex align-items-center mb-2">
-                    <div className="icon-box icon-red me-3"><i className="fas fa-arrow-up"></i></div>
-                    <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Total Expenses</div>
-                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--danger)" }}>{fmt(totalExpense)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="accounting-card">
-                  <div className="d-flex align-items-center mb-2">
-                    <div className="icon-box icon-purple me-3"><i className="fas fa-wallet"></i></div>
-                    <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Net Income</div>
-                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: netIncome >= 0 ? "var(--success)" : "var(--danger)" }}>{fmt(netIncome)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card table-card">
-              <div className="card-header d-flex justify-content-between align-items-center">
-                <span><i className="fas fa-list me-2" style={{ color: "var(--primary)" }}></i>Transactions</span>
-              </div>
-              <div className="card-body p-0">
+              ) : (
                 <div className="table-responsive">
-                  <table className="table mb-0">
-                    <thead><tr><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Date</th><th>Action</th></tr></thead>
+                  <table className="table table-hover mb-0">
+                    <thead className="bg-light">
+                      <tr>
+                        <th className="border-0">NAME</th>
+                        <th className="border-0">SHARES</th>
+                        <th className="border-0">VALUE</th>
+                      </tr>
+                    </thead>
                     <tbody>
-                      {transactions.map((t) => (
-                        <tr key={t.id}>
+                      {members.slice(0, 5).map((m) => (
+                        <tr key={m.id}>
                           <td>
-                            <span className={t.type === "income" ? "badge-paid" : "badge-active"}>
-                              {t.type === "income" ? "Income" : "Expense"}
-                            </span>
+                            <div className="d-flex align-items-center">
+                              {m.photo ? (
+                                <img src={m.photo} className="profile-photo rounded-circle me-2" alt="" style={{ width: 32, height: 32, objectFit: "cover" }} />
+                              ) : (
+                                <div className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white me-2" style={{ width: 32, height: 32, fontSize: 14 }}>
+                                  <i className="fas fa-user"></i>
+                                </div>
+                              )}
+                              {`${m.firstName} ${m.lastName}`.toUpperCase()}
+                            </div>
                           </td>
-                          <td style={{ fontWeight: 500 }}>{t.category}</td>
-                          <td style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>{t.description}</td>
-                          <td style={{ fontWeight: 600, color: t.type === "income" ? "var(--success)" : "var(--danger)" }}>
-                            {t.type === "income" ? "+" : "-"}{fmt(t.amount)}
-                          </td>
-                          <td>{t.date}</td>
-                          <td>
-                            <button className="btn btn-sm btn-outline-danger" onClick={() => deleteTx(t.id)}>
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          </td>
+                          <td>{m.shares}</td>
+                          <td>{formatPeso(m.shares * SHARE_VALUE)}</td>
                         </tr>
                       ))}
-                      {transactions.length === 0 && (
-                        <tr><td colSpan={6}>
-                          <div className="empty-state">
-                            <div><i className="fas fa-receipt"></i></div>
-                            <p>No transactions yet.</p>
-                          </div>
-                        </td></tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+        <div className="col-lg-6">
+          <div className="table-card card border-0 shadow-sm">
+            <div className="card-header bg-white border-0 pt-3 px-3">
+              <h6 className="fw-bold mb-0">RECENT ACTIVE LOANS</h6>
+            </div>
+            <div className="card-body p-0">
+              {activeLoans.length === 0 ? (
+                <div className="empty-state text-center py-5 text-muted">
+                  <i className="fas fa-hand-holding-usd fa-3x mb-3"></i>
+                  <p>NO ACTIVE LOANS</p>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover mb-0">
+                    <thead className="bg-light">
+                      <tr>
+                        <th className="border-0">BORROWER</th>
+                        <th className="border-0">AMOUNT</th>
+                        <th className="border-0">BALANCE</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeLoans.slice(0, 5).map((l) => (
+                        <tr key={l.id}>
+                          <td>{l.borrowerName.toUpperCase()}</td>
+                          <td>{formatPeso(l.amount)}</td>
+                          <td className="text-danger fw-bold">{formatPeso(l.balance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render Shareholders
+  const renderShareholders = () => (
+    <div>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h6 className="section-title fw-bold mb-0">ALL SHAREHOLDERS</h6>
+        <button className="btn btn-primary" onClick={openAddMember}>
+          <i className="fas fa-plus me-2"></i>ADD SHAREHOLDER
+        </button>
+      </div>
+      <div className="table-card card border-0 shadow-sm">
+        <div className="card-body p-0">
+          {members.length === 0 ? (
+            <div className="empty-state text-center py-5 text-muted">
+              <i className="fas fa-users fa-3x mb-3"></i>
+              <p>NO SHAREHOLDERS FOUND. ADD YOUR FIRST SHAREHOLDER.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead className="bg-light">
+                  <tr>
+                    <th className="border-0">PHOTO</th>
+                    <th className="border-0">NAME</th>
+                    <th className="border-0">ADDRESS</th>
+                    <th className="border-0">BIRTHDATE</th>
+                    <th className="border-0">SHARES</th>
+                    <th className="border-0">SHARE VALUE</th>
+                    <th className="border-0">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((m) => (
+                    <tr key={m.id}>
+                      <td>
+                        {m.photo ? (
+                          <img src={m.photo} className="profile-photo rounded-circle" alt="" style={{ width: 40, height: 40, objectFit: "cover" }} />
+                        ) : (
+                          <div className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white" style={{ width: 40, height: 40 }}>
+                            <i className="fas fa-user"></i>
+                          </div>
+                        )}
+                      </td>
+                      <td className="fw-semibold">
+                        {`${m.firstName} ${m.middleName} ${m.lastName} ${m.extension}`.trim().toUpperCase()}
+                      </td>
+                      <td>{m.address.toUpperCase()}</td>
+                      <td>{m.birthdate ? new Date(m.birthdate).toLocaleDateString("en-PH").toUpperCase() : "N/A"}</td>
+                      <td>{m.shares}</td>
+                      <td className="fw-bold">{formatPeso(m.shares * SHARE_VALUE)}</td>
+                      <td>
+                        <button className="btn btn-sm btn-outline-primary me-1" onClick={() => openEditMember(m)} title="EDIT">
+                          <i className="fas fa-edit"></i>
+                        </button>
+                        <button className="btn btn-sm btn-outline-danger" onClick={() => deleteMember(m.id)} title="DELETE">
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render Loans
+  const renderLoans = () => (
+    <div>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h6 className="section-title fw-bold mb-0">ALL LOANS</h6>
+        <button className="btn btn-primary" onClick={openAddLoan}>
+          <i className="fas fa-plus me-2"></i>ADD LOAN
+        </button>
+      </div>
+      <div className="table-card card border-0 shadow-sm">
+        <div className="card-body p-0">
+          {loans.length === 0 ? (
+            <div className="empty-state text-center py-5 text-muted">
+              <i className="fas fa-hand-holding-usd fa-3x mb-3"></i>
+              <p>NO LOANS FOUND. ADD YOUR FIRST LOAN.</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead className="bg-light">
+                  <tr>
+                    <th className="border-0">BORROWER</th>
+                    <th className="border-0">AMOUNT</th>
+                    <th className="border-0">BORROW DATE</th>
+                    <th className="border-0">INTEREST</th>
+                    <th className="border-0">TOTAL DUE</th>
+                    <th className="border-0">PAID</th>
+                    <th className="border-0">BALANCE</th>
+                    <th className="border-0">STATUS</th>
+                    <th className="border-0">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loans.map((l) => {
+                    const borrowerDisplay =
+                      l.borrowerType === "non-member"
+                        ? `(NON-MEMBER) ${l.borrowerName.toUpperCase()} - TAGGED TO: ${getMemberName(l.taggedMemberId)}`
+                        : l.borrowerName.toUpperCase();
+                    return (
+                      <tr key={l.id}>
+                        <td className="fw-semibold">{borrowerDisplay}</td>
+                        <td>{formatPeso(l.amount)}</td>
+                        <td>{new Date(l.borrowDate).toLocaleDateString("en-PH").toUpperCase()}</td>
+                        <td>{formatPeso(l.interestAmount)}</td>
+                        <td className="fw-bold">{formatPeso(l.totalDue)}</td>
+                        <td className="text-success">{formatPeso(l.totalPaid)}</td>
+                        <td className="text-danger fw-bold">{formatPeso(l.balance)}</td>
+                        <td>
+                          <span className={l.status === "active" ? "badge badge-active" : "badge badge-paid"}>
+                            {l.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="d-flex gap-1 flex-wrap">
+                            {l.status === "active" && (
+                              <>
+                                <button
+                                  className="btn btn-sm btn-outline-success"
+                                  onClick={() => {
+                                    setPaymentLoanId(l.id);
+                                    setPaymentAmount(0);
+                                    setShowPaymentModal(true);
+                                  }}
+                                  title="RECORD PAYMENT"
+                                >
+                                  <i className="fas fa-money-bill"></i>
+                                </button>
+                                <button className="btn btn-sm btn-outline-primary" onClick={() => markLoanPaid(l.id)} title="MARK AS PAID">
+                                  <i className="fas fa-check"></i>
+                                </button>
+                              </>
+                            )}
+                            <button className="btn btn-sm btn-outline-primary" onClick={() => openEditLoan(l)} title="EDIT">
+                              <i className="fas fa-edit"></i>
+                            </button>
+                            <button className="btn btn-sm btn-outline-danger" onClick={() => deleteLoan(l.id)} title="DELETE">
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Render Accounting
+  const renderAccounting = () => (
+    <div>
+      <h6 className="section-title fw-bold mb-4">FINANCIAL SUMMARY</h6>
+      <div className="row g-4 mb-4">
+        <div className="col-md-6 col-lg-3">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-purple mx-auto mb-3">
+                <i className="fas fa-coins"></i>
+              </div>
+              <div className="text-muted small mb-1">SHARE CAPITAL</div>
+              <h4 className="fw-bold">{formatPeso(totalShareValue)}</h4>
+              <small className="text-muted">{totalShares} SHARES x {formatPeso(SHARE_VALUE)}</small>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-orange mx-auto mb-3">
+                <i className="fas fa-hand-holding-usd"></i>
+              </div>
+              <div className="text-muted small mb-1">TOTAL LENT</div>
+              <h4 className="fw-bold">{formatPeso(totalLent)}</h4>
+              <small className="text-muted">{loans.length} TOTAL LOANS</small>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-green mx-auto mb-3">
+                <i className="fas fa-percentage"></i>
+              </div>
+              <div className="text-muted small mb-1">TOTAL INTEREST EARNED</div>
+              <h4 className="fw-bold">{formatPeso(totalInterestEarned)}</h4>
+              <small className="text-muted">10% MONTHLY COMPOUND</small>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6 col-lg-3">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-blue mx-auto mb-3">
+                <i className="fas fa-check-circle"></i>
+              </div>
+              <div className="text-muted small mb-1">TOTAL COLLECTED</div>
+              <h4 className="fw-bold">{formatPeso(totalCollected)}</h4>
+              <small className="text-muted">FROM ALL PAYMENTS</small>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="row g-4 mb-4">
+        <div className="col-md-6">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-red mx-auto mb-3">
+                <i className="fas fa-exclamation-triangle"></i>
+              </div>
+              <div className="text-muted small mb-1">OUTSTANDING BALANCE</div>
+              <h4 className="fw-bold text-danger">{formatPeso(outstandingBalance)}</h4>
+              <small className="text-muted">{activeLoans.length} ACTIVE LOANS</small>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-6">
+          <div className="accounting-card card border-0 shadow-sm h-100">
+            <div className="card-body text-center">
+              <div className="icon-box icon-green mx-auto mb-3">
+                <i className="fas fa-chart-line"></i>
+              </div>
+              <div className="text-muted small mb-1">NET POSITION</div>
+              <h4 className="fw-bold">{formatPeso(totalCollected - totalLent + outstandingBalance)}</h4>
+              <small className="text-muted">COLLECTED - LENT + OUTSTANDING</small>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* MEMBER MODAL */}
-      {showMemberModal && (
-        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title"><i className="fas fa-user-plus me-2"></i>{editMember ? "Edit" : "Add"} Member</h5>
-                <button className="btn-close" onClick={() => setShowMemberModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <div className="row g-3">
-                  <div className="col-md-4">
-                    <label className="form-label">First Name *</label>
-                    <input className="form-control" value={mForm.firstName} onChange={(e) => setMForm({ ...mForm, firstName: e.target.value })} />
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Middle Name</label>
-                    <input className="form-control" value={mForm.middleName} onChange={(e) => setMForm({ ...mForm, middleName: e.target.value })} />
-                  </div>
-                  <div className="col-md-3">
-                    <label className="form-label">Last Name *</label>
-                    <input className="form-control" value={mForm.lastName} onChange={(e) => setMForm({ ...mForm, lastName: e.target.value })} />
-                  </div>
-                  <div className="col-md-1">
-                    <label className="form-label">Ext.</label>
-                    <input className="form-control" value={mForm.extension} onChange={(e) => setMForm({ ...mForm, extension: e.target.value })} placeholder="Jr." />
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Birthdate</label>
-                    <input type="date" className="form-control" value={mForm.birthdate} onChange={(e) => setMForm({ ...mForm, birthdate: e.target.value })} />
-                  </div>
-                  <div className="col-md-8">
-                    <label className="form-label">Address</label>
-                    <input className="form-control" value={mForm.address} onChange={(e) => setMForm({ ...mForm, address: e.target.value })} />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label">Profile Photo</label>
-                    <input type="file" className="form-control" accept="image/*" onChange={handlePhoto} />
-                    {mForm.photo && <img src={mForm.photo} className="profile-photo-lg mt-2" alt="preview" />}
+      <h6 className="section-title fw-bold mb-3 mt-4">SUMMARY BREAKDOWN</h6>
+      <div className="card border-0 shadow-sm">
+        <div className="card-body">
+          <div className="summary-row d-flex justify-content-between py-2 border-bottom">
+            <span>TOTAL SHARE CAPITAL ({members.length} SHAREHOLDERS)</span>
+            <span className="fw-bold">{formatPeso(totalShareValue)}</span>
+          </div>
+          <div className="summary-row d-flex justify-content-between py-2 border-bottom">
+            <span>TOTAL AMOUNT LENT ({loans.length} LOANS)</span>
+            <span className="fw-bold">{formatPeso(totalLent)}</span>
+          </div>
+          <div className="summary-row d-flex justify-content-between py-2 border-bottom">
+            <span>TOTAL INTEREST EARNED</span>
+            <span className="fw-bold text-success">{formatPeso(totalInterestEarned)}</span>
+          </div>
+          <div className="summary-row d-flex justify-content-between py-2 border-bottom">
+            <span>TOTAL AMOUNT DUE (PRINCIPAL + INTEREST)</span>
+            <span className="fw-bold">{formatPeso(loans.reduce((s, l) => s + l.totalDue, 0))}</span>
+          </div>
+          <div className="summary-row d-flex justify-content-between py-2 border-bottom">
+            <span>TOTAL COLLECTED</span>
+            <span className="fw-bold text-success">{formatPeso(totalCollected)}</span>
+          </div>
+          <div className="summary-row d-flex justify-content-between py-2">
+            <span className="fw-bold">OUTSTANDING BALANCE</span>
+            <span className="fw-bold text-danger">{formatPeso(outstandingBalance)}</span>
+          </div>
         </div>
+      </div>
+
+      <h6 className="section-title fw-bold mb-3 mt-4">RECENT TRANSACTIONS</h6>
+      <div className="card border-0 shadow-sm">
+        <div className="card-body">
+          {loans.length === 0 ? (
+            <div className="empty-state text-center py-4 text-muted">
+              <p>NO TRANSACTIONS YET</p>
+            </div>
+          ) : (
+            loans
+              .flatMap((l) =>
+                l.payments.map((p) => ({
+                  ...p,
+                  borrowerName: l.borrowerName,
+                  loanId: l.id,
+                }))
+              )
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .slice(0, 10)
+              .map((t, idx) => (
+                <div key={idx} className="transaction-item d-flex align-items-center justify-content-between py-2 border-bottom">
+                  <div className="d-flex align-items-center">
+                    <div className="transaction-icon me-3">
+                      <i className="fas fa-money-bill text-success"></i>
+                    </div>
+                    <div>
+                      <div className="fw-semibold">{t.borrowerName.toUpperCase()}</div>
+                      <small className="text-muted">{new Date(t.date).toLocaleDateString("en-PH").toUpperCase()}</small>
+                    </div>
+                  </div>
+                  <span className="fw-bold text-success">{formatPeso(t.amount)}</span>
+                </div>
+              ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Member Modal
+  const renderMemberModal = () => {
+    if (!showMemberModal) return null;
+    return (
+      <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => { setShowMemberModal(false); stopCamera(); }}>
+        <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title fw-bold">{editingMember ? "EDIT SHAREHOLDER" : "ADD SHAREHOLDER"}</h5>
+              <button className="btn-close" onClick={() => { setShowMemberModal(false); stopCamera(); }}></button>
+            </div>
+            <div className="modal-body">
+              <div className="row g-3">
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">FIRST NAME</label>
+                  <input
+                    type="text"
+                    className="form-control text-uppercase"
+                    value={memberForm.firstName}
+                    onChange={(e) => setMemberForm({ ...memberForm, firstName: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">MIDDLE NAME</label>
+                  <input
+                    type="text"
+                    className="form-control text-uppercase"
+                    value={memberForm.middleName}
+                    onChange={(e) => setMemberForm({ ...memberForm, middleName: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">LAST NAME</label>
+                  <input
+                    type="text"
+                    className="form-control text-uppercase"
+                    value={memberForm.lastName}
+                    onChange={(e) => setMemberForm({ ...memberForm, lastName: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">EXTENSION (JR, SR, III)</label>
+                  <input
+                    type="text"
+                    className="form-control text-uppercase"
+                    value={memberForm.extension}
+                    onChange={(e) => setMemberForm({ ...memberForm, extension: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">BIRTHDATE</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={memberForm.birthdate}
+                    onChange={(e) => setMemberForm({ ...memberForm, birthdate: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">SHARES</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    min={1}
+                    value={memberForm.shares}
+                    onChange={(e) => setMemberForm({ ...memberForm, shares: parseInt(e.target.value) || 1 })}
+                  />
+                  <small className="text-muted">{formatPeso((memberForm.shares || 0) * SHARE_VALUE)}</small>
+                </div>
+                <div className="col-12">
+                  <label className="form-label fw-semibold">ADDRESS</label>
+                  <textarea
+                    className="form-control text-uppercase"
+                    rows={2}
+                    value={memberForm.address}
+                    onChange={(e) => setMemberForm({ ...memberForm, address: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label fw-semibold">PHOTO</label>
+                  <div className="d-flex align-items-start gap-3">
+                    {memberForm.photo && (
+                      <img src={memberForm.photo} className="profile-photo-lg rounded" alt="" style={{ width: 120, height: 120, objectFit: "cover" }} />
+                    )}
+                    <div>
+                      {cameraActive ? (
+                        <div>
+                          <video ref={videoRef} style={{ width: 240, height: 180, borderRadius: 8 }} autoPlay muted />
+                          <div className="mt-2 d-flex gap-2">
+                            <button className="btn btn-sm btn-primary" onClick={capturePhoto}>
+                              <i className="fas fa-camera me-1"></i>CAPTURE
+                            </button>
+                            <button className="btn btn-sm btn-outline-secondary" onClick={stopCamera}>
+                              CANCEL
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button className="btn btn-outline-primary" onClick={startCamera}>
+                          <i className="fas fa-camera me-2"></i>OPEN CAMERA
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-outline-secondary" onClick={() => setShowMemberModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveMember} disabled={!mForm.firstName || !mForm.lastName}>
-                  <i className="fas fa-save me-1"></i>{editMember ? "Update" : "Save"}
-                </button>
-              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline-secondary" onClick={() => { setShowMemberModal(false); stopCamera(); }}>
+                CANCEL
+              </button>
+              <button className="btn btn-primary" onClick={saveMember}>
+                <i className="fas fa-save me-2"></i>{editingMember ? "UPDATE" : "SAVE"}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  };
 
-      {/* LOAN MODAL */}
-      {showLoanModal && (
-        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title"><i className="fas fa-file-invoice-dollar me-2"></i>New Loan</h5>
-                <button className="btn-close" onClick={() => setShowLoanModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Borrower *</label>
-                    <select className="form-select" value={lForm.memberId} onChange={(e) => setLForm({ ...lForm, memberId: e.target.value })}>
-                      <option value="">Select member...</option>
-                      {members.map((m) => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Amount (PHP) *</label>
-                    <input type="number" className="form-control" value={lForm.amount} onChange={(e) => setLForm({ ...lForm, amount: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Borrow Date</label>
-                    <input type="date" className="form-control" value={lForm.borrowDate} onChange={(e) => setLForm({ ...lForm, borrowDate: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Interest Start Date</label>
-                    <input type="date" className="form-control" value={lForm.interestStartDate} onChange={(e) => setLForm({ ...lForm, interestStartDate: e.target.value })} />
-                  </div>
-                  <div className="col-12">
-                    <label className="form-label">Digital Signature</label>
-                    <canvas ref={sigCanvas} width={500} height={150} className="signature-pad w-100"
-                      onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw} />
-                    <button className="btn btn-sm btn-outline-secondary mt-1" onClick={clearSig}>
-                      <i className="fas fa-eraser me-1"></i>Clear
+  // Loan Modal
+  const renderLoanModal = () => {
+    if (!showLoanModal) return null;
+    return (
+      <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => setShowLoanModal(false)}>
+        <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title fw-bold">{editingLoan ? "EDIT LOAN" : "ADD LOAN"}</h5>
+              <button className="btn-close" onClick={() => setShowLoanModal(false)}></button>
+            </div>
+            <div className="modal-body">
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label fw-semibold">BORROWER TYPE</label>
+                  <div className="btn-group w-100">
+                    <button
+                      className={`btn ${loanForm.borrowerType === "member" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setLoanForm({ ...loanForm, borrowerType: "member", borrowerName: "", taggedMemberId: "" })}
+                    >
+                      MEMBER
+                    </button>
+                    <button
+                      className={`btn ${loanForm.borrowerType === "non-member" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setLoanForm({ ...loanForm, borrowerType: "non-member", memberId: "" })}
+                    >
+                      NON-MEMBER
                     </button>
                   </div>
                 </div>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-outline-secondary" onClick={() => setShowLoanModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveLoan} disabled={!lForm.memberId || !lForm.amount}>
-                  <i className="fas fa-save me-1"></i>Create Loan
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* PAYMENT MODAL */}
-      {showPayModal && payLoan && (
-        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title"><i className="fas fa-money-bill-wave me-2"></i>Record Payment</h5>
-                <button className="btn-close" onClick={() => setShowPayModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <p><strong>Borrower:</strong> {getMemberName(payLoan.memberId)}</p>
-                <p><strong>Balance:</strong> <span style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(payLoan.balance || 0)}</span></p>
-                <div className="mb-3">
-                  <label className="form-label">Payment Amount (PHP)</label>
-                  <input type="number" className="form-control" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-                </div>
-                <div className="mb-3">
-                  <label className="form-label">Payment Date</label>
-                  <input type="date" className="form-control" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button className="btn btn-outline-secondary" onClick={() => setShowPayModal(false)}>Cancel</button>
-                <button className="btn btn-success" onClick={makePayment} disabled={!payAmount}>
-                  <i className="fas fa-check me-1"></i>Record Payment
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TRANSACTION MODAL */}
-      {showTxModal && (
-        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title"><i className="fas fa-receipt me-2"></i>New Transaction</h5>
-                <button className="btn-close" onClick={() => setShowTxModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Type</label>
-                    <select className="form-select" value={txForm.type} onChange={(e) => setTxForm({ ...txForm, type: e.target.value as "income" | "expense" })}>
-                      <option value="income">Income</option>
-                      <option value="expense">Expense</option>
+                {loanForm.borrowerType === "member" ? (
+                  <div className="col-12">
+                    <label className="form-label fw-semibold">SELECT MEMBER</label>
+                    <select
+                      className="form-select"
+                      value={loanForm.memberId}
+                      onChange={(e) => setLoanForm({ ...loanForm, memberId: e.target.value })}
+                    >
+                      <option value="">-- SELECT A MEMBER --</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {`${m.firstName} ${m.middleName} ${m.lastName} ${m.extension}`.trim().toUpperCase()}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Category</label>
-                    <input className="form-control" value={txForm.category} onChange={(e) => setTxForm({ ...txForm, category: e.target.value })}
-                      placeholder={txForm.type === "income" ? "e.g. Loan Payment, Interest" : "e.g. Operating, Transport"} />
+                ) : (
+                  <>
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold">BORROWER NAME</label>
+                      <input
+                        type="text"
+                        className="form-control text-uppercase"
+                        value={loanForm.borrowerName}
+                        onChange={(e) => setLoanForm({ ...loanForm, borrowerName: e.target.value.toUpperCase() })}
+                      />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold">TAGGED TO MEMBER</label>
+                      <select
+                        className="form-select"
+                        value={loanForm.taggedMemberId}
+                        onChange={(e) => setLoanForm({ ...loanForm, taggedMemberId: e.target.value })}
+                      >
+                        <option value="">-- SELECT A MEMBER --</option>
+                        {members.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {`${m.firstName} ${m.middleName} ${m.lastName} ${m.extension}`.trim().toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">LOAN AMOUNT</label>
+                  <div className="input-group">
+                    <span className="input-group-text">₱</span>
+                    <input
+                      type="number"
+                      className="form-control"
+                      min={0}
+                      value={loanForm.amount}
+                      onChange={(e) => setLoanForm({ ...loanForm, amount: parseFloat(e.target.value) || 0 })}
+                    />
                   </div>
-                  <div className="col-12">
-                    <label className="form-label">Description</label>
-                    <input className="form-control" value={txForm.description} onChange={(e) => setTxForm({ ...txForm, description: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Amount (PHP)</label>
-                    <input type="number" className="form-control" value={txForm.amount} onChange={(e) => setTxForm({ ...txForm, amount: e.target.value })} />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Date</label>
-                    <input type="date" className="form-control" value={txForm.date} onChange={(e) => setTxForm({ ...txForm, date: e.target.value })} />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">BORROW DATE</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={loanForm.borrowDate}
+                    onChange={(e) => setLoanForm({ ...loanForm, borrowDate: e.target.value })}
+                  />
+                </div>
+                <div className="col-md-4">
+                  <label className="form-label fw-semibold">INTEREST START DATE</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={loanForm.interestStartDate}
+                    onChange={(e) => setLoanForm({ ...loanForm, interestStartDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="col-12">
+                  <label className="form-label fw-semibold">SIGNATURE</label>
+                  <div className="border rounded p-2">
+                    {loanForm.signature && !canvasRef.current ? (
+                      <div className="text-center mb-2">
+                        <img src={loanForm.signature} alt="SIGNATURE" style={{ maxHeight: 100 }} />
+                      </div>
+                    ) : null}
+                    <canvas
+                      ref={canvasRef}
+                      className="signature-pad w-100"
+                      width={600}
+                      height={150}
+                      style={{ border: "1px solid #dee2e6", borderRadius: 4, cursor: "crosshair", touchAction: "none" }}
+                      onMouseDown={startDrawing}
+                      onMouseMove={draw}
+                      onMouseUp={stopDrawing}
+                      onMouseLeave={stopDrawing}
+                      onTouchStart={startDrawing}
+                      onTouchMove={draw}
+                      onTouchEnd={stopDrawing}
+                    />
+                    <div className="mt-2 d-flex gap-2">
+                      <button className="btn btn-sm btn-outline-secondary" onClick={clearSignature}>
+                        <i className="fas fa-eraser me-1"></i>CLEAR
+                      </button>
+                      <button className="btn btn-sm btn-outline-primary" onClick={saveSignature}>
+                        <i className="fas fa-save me-1"></i>SAVE SIGNATURE
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button className="btn btn-outline-secondary" onClick={() => setShowTxModal(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={saveTx} disabled={!txForm.category || !txForm.amount}>
-                  <i className="fas fa-save me-1"></i>Save
-                </button>
-              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline-secondary" onClick={() => setShowLoanModal(false)}>
+                CANCEL
+              </button>
+              <button className="btn btn-primary" onClick={saveLoan}>
+                <i className="fas fa-save me-2"></i>{editingLoan ? "UPDATE" : "SAVE"}
+              </button>
             </div>
           </div>
         </div>
-      )}
+      </div>
+    );
+  };
+
+  // Payment Modal
+  const renderPaymentModal = () => {
+    if (!showPaymentModal) return null;
+    const loan = loans.find((l) => l.id === paymentLoanId);
+    return (
+      <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} onClick={() => setShowPaymentModal(false)}>
+        <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title fw-bold">RECORD PAYMENT</h5>
+              <button className="btn-close" onClick={() => setShowPaymentModal(false)}></button>
+            </div>
+            <div className="modal-body">
+              {loan && (
+                <div className="mb-3 p-3 bg-light rounded">
+                  <div className="fw-semibold">{loan.borrowerName.toUpperCase()}</div>
+                  <div className="text-muted small">
+                    BALANCE: <span className="text-danger fw-bold">{formatPeso(loan.balance)}</span>
+                  </div>
+                  <div className="text-muted small">
+                    TOTAL DUE: {formatPeso(loan.totalDue)} | PAID: {formatPeso(loan.totalPaid)}
+                  </div>
+                </div>
+              )}
+              <label className="form-label fw-semibold">PAYMENT AMOUNT</label>
+              <div className="input-group">
+                <span className="input-group-text">₱</span>
+                <input
+                  type="number"
+                  className="form-control"
+                  min={0}
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline-secondary" onClick={() => setShowPaymentModal(false)}>
+                CANCEL
+              </button>
+              <button className="btn btn-primary" onClick={recordPayment}>
+                <i className="fas fa-check me-2"></i>RECORD PAYMENT
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Initialize signature pad when loan modal opens
+  useEffect(() => {
+    if (showLoanModal) {
+      setTimeout(() => initSignaturePad(), 100);
+    }
+  }, [showLoanModal]);
+
+  // Set video srcObject when camera becomes active
+  useEffect(() => {
+    if (cameraActive && cameraStream && videoRef.current) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraActive, cameraStream]);
+
+  const renderCurrentPage = () => {
+    switch (currentPage) {
+      case "dashboard":
+        return renderDashboard();
+      case "shareholders":
+        return renderShareholders();
+      case "loans":
+        return renderLoans();
+      case "accounting":
+        return renderAccounting();
+      default:
+        return renderDashboard();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="d-flex align-items-center justify-content-center" style={{ minHeight: "100vh" }}>
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" role="status">
+            <span className="visually-hidden">LOADING...</span>
+          </div>
+          <p className="text-muted">LOADING LENDINGMAHAY...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="d-flex" style={{ minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
+      {renderSidebar()}
+      <div className="flex-grow-1" style={{ marginLeft: sidebarOpen ? 250 : 0, transition: "margin-left 0.3s" }}>
+        {renderTopBar()}
+        <div className="main-content p-4">
+          {renderCurrentPage()}
+        </div>
+      </div>
+      {renderMemberModal()}
+      {renderLoanModal()}
+      {renderPaymentModal()}
     </div>
   );
 }
