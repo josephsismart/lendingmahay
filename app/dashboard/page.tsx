@@ -2,124 +2,133 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
 interface Member {
-  id: string; firstName: string; middleName: string; lastName: string;
-  extension: string; birthdate: string; address: string; photo: string; createdAt: string;
+  id: string;
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  extension: string;
+  birthdate: string;
+  address: string;
+  photo: string;
 }
+
+interface Payment {
+  id: string;
+  amount: number;
+  date: string;
+}
+
 interface Loan {
-  id: string; memberId: string; amount: number; borrowDate: string;
-  interestStartDate: string; signature: string; status: string;
-  payments: { id: string; amount: number; date: string }[];
-  totalDue?: number; interestAmount?: number; months?: number; totalPaid?: number; balance?: number;
+  id: string;
+  memberId: string;
+  amount: number;
+  borrowDate: string;
+  interestStartDate: string;
+  signature: string;
+  status: string;
+  payments: Payment[];
+  months?: number;
+  totalDue?: number;
+  totalPaid?: number;
+  balance?: number;
 }
+
 interface Transaction {
-  id: string; type: "income" | "expense"; category: string;
-  description: string; amount: number; date: string;
+  id: string;
+  type: "income" | "expense";
+  category: string;
+  description: string;
+  amount: number;
+  date: string;
 }
 
 type Page = "dashboard" | "members" | "loans" | "accounting";
 
-export default function Dashboard() {
+export default function DashboardPage() {
   const [page, setPage] = useState<Page>("dashboard");
   const [members, setMembers] = useState<Member[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
-  const [showMemberModal, setShowMemberModal] = useState(false);
-  const [showLoanModal, setShowLoanModal] = useState(false);
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [showTxModal, setShowTxModal] = useState(false);
-  const [editMember, setEditMember] = useState<Member | null>(null);
-  const [payLoan, setPayLoan] = useState<Loan | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Accounting state
+  // Transaction state (client-side)
   const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: "t1", type: "income", category: "Loan Interest", description: "Interest from Maria Dela Cruz", amount: 3000, date: "2025-07-15" },
-    { id: "t2", type: "income", category: "Loan Payment", description: "Payment from Juan Garcia Jr.", amount: 5000, date: "2025-07-10" },
-    { id: "t3", type: "expense", category: "Operating", description: "Office supplies", amount: 1500, date: "2025-07-08" },
-    { id: "t4", type: "income", category: "Loan Payment", description: "Payment from Elena Villanueva", amount: 2000, date: "2025-07-01" },
-    { id: "t5", type: "expense", category: "Transport", description: "Gas and travel for collections", amount: 800, date: "2025-06-28" },
-    { id: "t6", type: "income", category: "Loan Interest", description: "Interest collected from Pedro Mendoza", amount: 1500, date: "2025-06-25" },
+    { id: "t1", type: "income", category: "Loan Payment", description: "Maria Dela Cruz - March payment", amount: 3000, date: "2025-03-15" },
+    { id: "t2", type: "income", category: "Loan Payment", description: "Juan Garcia - April payment", amount: 5000, date: "2025-04-01" },
+    { id: "t3", type: "expense", category: "Operating", description: "Office supplies and printing", amount: 1500, date: "2025-03-20" },
+    { id: "t4", type: "income", category: "Interest", description: "Monthly interest collection", amount: 2500, date: "2025-04-15" },
+    { id: "t5", type: "expense", category: "Transport", description: "Collection route gasoline", amount: 800, date: "2025-04-10" },
+    { id: "t6", type: "income", category: "Loan Payment", description: "Ana Bautista - Final payment", amount: 4500, date: "2025-02-01" },
   ]);
-  const [txForm, setTxForm] = useState({ type: "income" as "income" | "expense", category: "", description: "", amount: "", date: "" });
 
-  // Member form
+  // Member modal
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [editMember, setEditMember] = useState<Member | null>(null);
   const [mForm, setMForm] = useState({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
-  // Loan form
+
+  // Loan modal
+  const [showLoanModal, setShowLoanModal] = useState(false);
   const [lForm, setLForm] = useState({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
-  // Payment form
+
+  // Payment modal
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [payLoan, setPayLoan] = useState<Loan | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState("");
 
-  // Signature canvas
+  // Transaction modal
+  const [showTxModal, setShowTxModal] = useState(false);
+  const [txForm, setTxForm] = useState({ type: "income" as "income" | "expense", category: "", description: "", amount: "", date: "" });
+
+  // Signature
   const sigCanvas = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const [drawing, setDrawing] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const [mRes, lRes] = await Promise.all([fetch("/api/members"), fetch("/api/loans")]);
-    setMembers(await mRes.json());
-    setLoans(await lRes.json());
+    try {
+      const [mRes, lRes] = await Promise.all([fetch("/api/members"), fetch("/api/loans")]);
+      if (mRes.ok) setMembers(await mRes.json());
+      if (lRes.ok) setLoans(await lRes.json());
+    } catch (e) {
+      console.error("Fetch error:", e);
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Photo upload
+  // Photo handler
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const max = 200;
-        let w = img.width, h = img.height;
-        if (w > h) { h = (h / w) * max; w = max; } else { w = (w / h) * max; h = max; }
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-        setMForm((f) => ({ ...f, photo: canvas.toDataURL("image/jpeg", 0.6) }));
-      };
-      img.src = ev.target!.result as string;
-    };
+    reader.onload = () => setMForm({ ...mForm, photo: reader.result as string });
     reader.readAsDataURL(file);
   };
 
   // Signature drawing
   const startDraw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDrawing(true);
-    const ctx = sigCanvas.current!.getContext("2d")!;
-    const rect = sigCanvas.current!.getBoundingClientRect();
-    ctx.beginPath();
-    ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+    setDrawing(true);
+    const ctx = sigCanvas.current?.getContext("2d");
+    if (ctx) { ctx.beginPath(); ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY); }
   };
   const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const ctx = sigCanvas.current!.getContext("2d")!;
-    const rect = sigCanvas.current!.getBoundingClientRect();
-    ctx.lineWidth = 2; ctx.strokeStyle = "#3d3556"; ctx.lineCap = "round";
-    ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-    ctx.stroke();
+    if (!drawing) return;
+    const ctx = sigCanvas.current?.getContext("2d");
+    if (ctx) { ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY); ctx.stroke(); }
   };
-  const endDraw = () => {
-    setIsDrawing(false);
-    if (sigCanvas.current) setLForm((f) => ({ ...f, signature: sigCanvas.current!.toDataURL() }));
-  };
+  const endDraw = () => setDrawing(false);
   const clearSig = () => {
-    const c = sigCanvas.current;
-    if (c) c.getContext("2d")!.clearRect(0, 0, c.width, c.height);
-    setLForm((f) => ({ ...f, signature: "" }));
+    const ctx = sigCanvas.current?.getContext("2d");
+    if (ctx && sigCanvas.current) ctx.clearRect(0, 0, sigCanvas.current.width, sigCanvas.current.height);
   };
 
-  // CRUD Members
+  // Member CRUD
   const saveMember = async () => {
     const method = editMember ? "PUT" : "POST";
     const body = editMember ? { ...mForm, id: editMember.id } : mForm;
     await fetch("/api/members", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setShowMemberModal(false); setEditMember(null);
+    setShowMemberModal(false);
+    setEditMember(null);
     setMForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
-    fetchData();
-  };
-  const deleteMember = async (id: string) => {
-    if (!confirm("Delete this member?")) return;
-    await fetch("/api/members", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
     fetchData();
   };
   const openEditMember = (m: Member) => {
@@ -127,10 +136,20 @@ export default function Dashboard() {
     setMForm({ firstName: m.firstName, middleName: m.middleName, lastName: m.lastName, extension: m.extension, birthdate: m.birthdate, address: m.address, photo: m.photo });
     setShowMemberModal(true);
   };
+  const deleteMember = async (id: string) => {
+    if (!confirm("Delete this member?")) return;
+    await fetch("/api/members", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    fetchData();
+  };
 
-  // CRUD Loans
+  // Loan CRUD
   const saveLoan = async () => {
-    await fetch("/api/loans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(lForm) });
+    const sig = sigCanvas.current?.toDataURL() || "";
+    await fetch("/api/loans", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...lForm, signature: sig }),
+    });
     setShowLoanModal(false);
     setLForm({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
     fetchData();
@@ -138,10 +157,14 @@ export default function Dashboard() {
   const makePayment = async () => {
     if (!payLoan) return;
     await fetch("/api/loans", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: payLoan.id, action: "pay", paymentAmount: payAmount, paymentDate: payDate }),
     });
-    setShowPayModal(false); setPayLoan(null); setPayAmount(""); setPayDate("");
+    setShowPayModal(false);
+    setPayLoan(null);
+    setPayAmount("");
+    setPayDate("");
     fetchData();
   };
   const markPaid = async (id: string) => {
@@ -170,59 +193,11 @@ export default function Dashboard() {
     setTxForm({ type: "income", category: "", description: "", amount: "", date: "" });
   };
   const deleteTx = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+    setTransactions(transactions.filter((t) => t.id !== id));
   };
 
   const getMemberName = (id: string) => {
-    const m = members.find((m) => m.id === id);
-    return m ? `${m.firstName} ${m.lastName}` : "Unknown";
-  };
-
-: JSON.stringify(lForm) });
-    setShowLoanModal(false);
-    setLForm({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
-    fetchData();
-  };
-  const makePayment = async () => {
-    if (!payLoan) return;
-    await fetch("/api/loans", {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: payLoan.id, action: "pay", paymentAmount: payAmount, paymentDate: payDate }),
-    });
-    setShowPayModal(false); setPayLoan(null); setPayAmount(""); setPayDate("");
-    fetchData();
-  };
-  const markPaid = async (id: string) => {
-    if (!confirm("Mark this loan as fully paid?")) return;
-    await fetch("/api/loans", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "markPaid" }) });
-    fetchData();
-  };
-  const deleteLoan = async (id: string) => {
-    if (!confirm("Delete this loan?")) return;
-    await fetch("/api/loans", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-    fetchData();
-  };
-
-  // Accounting
-  const saveTx = () => {
-    const tx: Transaction = {
-      id: Date.now().toString(36),
-      type: txForm.type,
-      category: txForm.category,
-      description: txForm.description,
-      amount: Number(txForm.amount),
-      date: txForm.date,
-    };
-    setTransactions([tx, ...transactions]);
-    setShowTxModal(false);
-    setTxForm({ type: "income", category: "", description: "", amount: "", date: "" });
-  };
-  const deleteTx = (id: string) => {
-    setTransactions(transactions.filter(t => t.id !== id));
-  };
-
-  const getMemberName = (id: string) => {
-    const m = members.find((m) => m.id === id);
+    const m = members.find((x) => x.id === id);
     return m ? `${m.firstName} ${m.lastName}` : "Unknown";
   };
 
@@ -231,8 +206,8 @@ export default function Dashboard() {
   const totalBalance = activeLoans.reduce((s, l) => s + (l.balance || 0), 0);
   const totalCollected = loans.reduce((s, l) => s + (l.totalPaid || 0), 0);
 
-  const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const totalIncome = transactions.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = transactions.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const netIncome = totalIncome - totalExpense;
 
   const fmt = (n: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
@@ -298,7 +273,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
-            </div>
+     </div>
 
             <div className="row g-3">
               <div className="col-md-7">
@@ -480,7 +455,6 @@ export default function Dashboard() {
               </button>
             </div>
 
-            {/* Accounting Summary Cards */}
             <div className="row g-3 mb-4">
               <div className="col-md-4">
                 <div className="accounting-card">
@@ -517,7 +491,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Transaction List */}
             <div className="card table-card">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <span><i className="fas fa-list me-2" style={{ color: "var(--primary)" }}></i>Transactions</span>
@@ -603,7 +576,7 @@ export default function Dashboard() {
                     <label className="form-label">Profile Photo</label>
                     <input type="file" className="form-control" accept="image/*" onChange={handlePhoto} />
                     {mForm.photo && <img src={mForm.photo} className="profile-photo-lg mt-2" alt="preview" />}
-                  </div>
+        </div>
                 </div>
               </div>
               <div className="modal-footer">
