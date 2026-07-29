@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
 
 interface Member {
   id: string; firstName: string; middleName: string; lastName: string;
@@ -12,20 +11,35 @@ interface Loan {
   payments: { id: string; amount: number; date: string }[];
   totalDue?: number; interestAmount?: number; months?: number; totalPaid?: number; balance?: number;
 }
+interface Transaction {
+  id: string; type: "income" | "expense"; category: string;
+  description: string; amount: number; date: string;
+}
 
-type Page = "dashboard" | "members" | "loans";
+type Page = "dashboard" | "members" | "loans" | "accounting";
 
 export default function Dashboard() {
-  const router = useRouter();
   const [page, setPage] = useState<Page>("dashboard");
   const [members, setMembers] = useState<Member[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [showLoanModal, setShowLoanModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
+  const [showTxModal, setShowTxModal] = useState(false);
   const [editMember, setEditMember] = useState<Member | null>(null);
   const [payLoan, setPayLoan] = useState<Loan | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Accounting state
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: "t1", type: "income", category: "Loan Interest", description: "Interest from Maria Dela Cruz", amount: 3000, date: "2025-07-15" },
+    { id: "t2", type: "income", category: "Loan Payment", description: "Payment from Juan Garcia Jr.", amount: 5000, date: "2025-07-10" },
+    { id: "t3", type: "expense", category: "Operating", description: "Office supplies", amount: 1500, date: "2025-07-08" },
+    { id: "t4", type: "income", category: "Loan Payment", description: "Payment from Elena Villanueva", amount: 2000, date: "2025-07-01" },
+    { id: "t5", type: "expense", category: "Transport", description: "Gas and travel for collections", amount: 800, date: "2025-06-28" },
+    { id: "t6", type: "income", category: "Loan Interest", description: "Interest collected from Pedro Mendoza", amount: 1500, date: "2025-06-25" },
+  ]);
+  const [txForm, setTxForm] = useState({ type: "income" as "income" | "expense", category: "", description: "", amount: "", date: "" });
 
   // Member form
   const [mForm, setMForm] = useState({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
@@ -45,17 +59,9 @@ export default function Dashboard() {
     setLoans(await lRes.json());
   }, []);
 
-  useEffect(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("auth") !== "true") {
-      router.push("/");
-      return;
-    }
-    fetchData();
-  }, [router, fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleLogout = () => { sessionStorage.removeItem("auth"); router.push("/"); };
-
-  // Photo upload (compress to ~50kb)
+  // Photo upload
   const handlePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -88,15 +94,13 @@ export default function Dashboard() {
     if (!isDrawing) return;
     const ctx = sigCanvas.current!.getContext("2d")!;
     const rect = sigCanvas.current!.getBoundingClientRect();
-    ctx.lineWidth = 2; ctx.strokeStyle = "#000"; ctx.lineCap = "round";
+    ctx.lineWidth = 2; ctx.strokeStyle = "#3d3556"; ctx.lineCap = "round";
     ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
     ctx.stroke();
   };
   const endDraw = () => {
     setIsDrawing(false);
-    if (sigCanvas.current) {
-      setLForm((f) => ({ ...f, signature: sigCanvas.current!.toDataURL() }));
-    }
+    if (sigCanvas.current) setLForm((f) => ({ ...f, signature: sigCanvas.current!.toDataURL() }));
   };
   const clearSig = () => {
     const c = sigCanvas.current;
@@ -109,8 +113,7 @@ export default function Dashboard() {
     const method = editMember ? "PUT" : "POST";
     const body = editMember ? { ...mForm, id: editMember.id } : mForm;
     await fetch("/api/members", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    setShowMemberModal(false);
-    setEditMember(null);
+    setShowMemberModal(false); setEditMember(null);
     setMForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" });
     fetchData();
   };
@@ -152,6 +155,72 @@ export default function Dashboard() {
     fetchData();
   };
 
+  // Accounting
+  const saveTx = () => {
+    const tx: Transaction = {
+      id: Date.now().toString(36),
+      type: txForm.type,
+      category: txForm.category,
+      description: txForm.description,
+      amount: Number(txForm.amount),
+      date: txForm.date,
+    };
+    setTransactions([tx, ...transactions]);
+    setShowTxModal(false);
+    setTxForm({ type: "income", category: "", description: "", amount: "", date: "" });
+  };
+  const deleteTx = (id: string) => {
+    setTransactions(transactions.filter(t => t.id !== id));
+  };
+
+  const getMemberName = (id: string) => {
+    const m = members.find((m) => m.id === id);
+    return m ? `${m.firstName} ${m.lastName}` : "Unknown";
+  };
+
+: JSON.stringify(lForm) });
+    setShowLoanModal(false);
+    setLForm({ memberId: "", amount: "", borrowDate: "", interestStartDate: "", signature: "" });
+    fetchData();
+  };
+  const makePayment = async () => {
+    if (!payLoan) return;
+    await fetch("/api/loans", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: payLoan.id, action: "pay", paymentAmount: payAmount, paymentDate: payDate }),
+    });
+    setShowPayModal(false); setPayLoan(null); setPayAmount(""); setPayDate("");
+    fetchData();
+  };
+  const markPaid = async (id: string) => {
+    if (!confirm("Mark this loan as fully paid?")) return;
+    await fetch("/api/loans", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: "markPaid" }) });
+    fetchData();
+  };
+  const deleteLoan = async (id: string) => {
+    if (!confirm("Delete this loan?")) return;
+    await fetch("/api/loans", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    fetchData();
+  };
+
+  // Accounting
+  const saveTx = () => {
+    const tx: Transaction = {
+      id: Date.now().toString(36),
+      type: txForm.type,
+      category: txForm.category,
+      description: txForm.description,
+      amount: Number(txForm.amount),
+      date: txForm.date,
+    };
+    setTransactions([tx, ...transactions]);
+    setShowTxModal(false);
+    setTxForm({ type: "income", category: "", description: "", amount: "", date: "" });
+  };
+  const deleteTx = (id: string) => {
+    setTransactions(transactions.filter(t => t.id !== id));
+  };
+
   const getMemberName = (id: string) => {
     const m = members.find((m) => m.id === id);
     return m ? `${m.firstName} ${m.lastName}` : "Unknown";
@@ -162,6 +231,10 @@ export default function Dashboard() {
   const totalBalance = activeLoans.reduce((s, l) => s + (l.balance || 0), 0);
   const totalCollected = loans.reduce((s, l) => s + (l.totalPaid || 0), 0);
 
+  const totalIncome = transactions.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
+  const totalExpense = transactions.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const netIncome = totalIncome - totalExpense;
+
   const fmt = (n: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
 
   return (
@@ -169,11 +242,11 @@ export default function Dashboard() {
       {/* Sidebar */}
       <div className={`sidebar ${sidebarOpen ? "show" : ""}`}>
         <div className="sidebar-brand">
-          <i className="fas fa-hand-holding-usd me-2"></i>LendingMahay
+          <i className="fas fa-hand-holding-usd"></i>LendingMahay
         </div>
-        <nav className="nav flex-column mt-3">
+        <nav className="nav flex-column mt-2">
           <a className={`nav-link ${page === "dashboard" ? "active" : ""}`} href="#" onClick={() => { setPage("dashboard"); setSidebarOpen(false); }}>
-            <i className="fas fa-tachometer-alt"></i>Dashboard
+            <i className="fas fa-th-large"></i>Dashboard
           </a>
           <a className={`nav-link ${page === "members" ? "active" : ""}`} href="#" onClick={() => { setPage("members"); setSidebarOpen(false); }}>
             <i className="fas fa-users"></i>Members
@@ -181,135 +254,95 @@ export default function Dashboard() {
           <a className={`nav-link ${page === "loans" ? "active" : ""}`} href="#" onClick={() => { setPage("loans"); setSidebarOpen(false); }}>
             <i className="fas fa-file-invoice-dollar"></i>Loans
           </a>
-          <hr className="border-secondary mx-3" />
-          <a className="nav-link" href="#" onClick={handleLogout}>
-            <i className="fas fa-sign-out-alt"></i>Logout
+          <a className={`nav-link ${page === "accounting" ? "active" : ""}`} href="#" onClick={() => { setPage("accounting"); setSidebarOpen(false); }}>
+            <i className="fas fa-calculator"></i>Accounting
           </a>
         </nav>
       </div>
 
       {/* Main Content */}
       <div className="main-content">
-        {/* Top Bar */}
-        <div className="top-bar d-flex justify-content-between align-items-center">
+        <div className="top-bar">
           <div>
-            <button className="btn btn-outline-secondary d-md-none me-2" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <button className="btn btn-outline-secondary d-md-none me-2" onClick={() => setSidebarOpen(!sidebarOpen)} style={{ border: "none", padding: "4px 8px" }}>
               <i className="fas fa-bars"></i>
             </button>
-            <strong className="text-capitalize">{page}</strong>
+            <span className="section-title text-capitalize">{page}</span>
           </div>
-          <div className="text-muted small">
-            <i className="fas fa-user-shield me-1"></i>Admin
+          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+            <i className="fas fa-circle me-1" style={{ fontSize: "8px", color: "var(--success)" }}></i>Online
           </div>
         </div>
 
-        {/* DASHBOARD PAGE */}
+        {/* DASHBOARD */}
         {page === "dashboard" && (
           <div>
             <div className="row g-3 mb-4">
-              <div className="col-md-3 col-6">
-                <div className="card stat-card">
-                  <div className="card-body d-flex align-items-center">
-                    <div className="icon-box bg-primary bg-opacity-10 text-primary me-3">
-                      <i className="fas fa-users"></i>
-                    </div>
-                    <div>
-                      <div className="text-muted small">Members</div>
-                      <div className="fw-bold fs-5">{members.length}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-3 col-6">
-                <div className="card stat-card">
-                  <div className="card-body d-flex align-items-center">
-                    <div className="icon-box bg-warning bg-opacity-10 text-warning me-3">
-                      <i className="fas fa-file-invoice-dollar"></i>
-                    </div>
-                    <div>
-                      <div className="text-muted small">Active Loans</div>
-                      <div className="fw-bold fs-5">{activeLoans.length}</div>
+              {[
+                { label: "Members", value: members.length, icon: "fas fa-users", cls: "icon-purple" },
+                { label: "Active Loans", value: activeLoans.length, icon: "fas fa-file-invoice-dollar", cls: "icon-orange" },
+                { label: "Total Balance", value: fmt(totalBalance), icon: "fas fa-peso-sign", cls: "icon-red" },
+                { label: "Collected", value: fmt(totalCollected), icon: "fas fa-coins", cls: "icon-green" },
+              ].map((s, i) => (
+                <div className="col-md-3 col-6" key={i}>
+                  <div className="card stat-card">
+                    <div className="card-body d-flex align-items-center">
+                      <div className={`icon-box ${s.cls} me-3`}>
+                        <i className={s.icon}></i>
+                      </div>
+                      <div>
+                        <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", fontWeight: 500 }}>{s.label}</div>
+                        <div style={{ fontWeight: 700, fontSize: "1.15rem" }}>{s.value}</div>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="col-md-3 col-6">
-                <div className="card stat-card">
-                  <div className="card-body d-flex align-items-center">
-                    <div className="icon-box bg-danger bg-opacity-10 text-danger me-3">
-                      <i className="fas fa-peso-sign"></i>
-                    </div>
-                    <div>
-                      <div className="text-muted small">Total Balance</div>
-                      <div className="fw-bold fs-6">{fmt(totalBalance)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-3 col-6">
-                <div className="card stat-card">
-                  <div className="card-body d-flex align-items-center">
-                    <div className="icon-box bg-success bg-opacity-10 text-success me-3">
-                      <i className="fas fa-coins"></i>
-                    </div>
-                    <div>
-                      <div className="text-muted small">Collected</div>
-                      <div className="fw-bold fs-6">{fmt(totalCollected)}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="row g-3">
-              <div className="col-md-6">
+              <div className="col-md-7">
                 <div className="card table-card">
-                  <div className="card-header bg-white border-bottom">
-                    <i className="fas fa-clock me-2 text-warning"></i>Recent Loans
+                  <div className="card-header">
+                    <i className="fas fa-clock me-2" style={{ color: "var(--accent)" }}></i>Recent Active Loans
                   </div>
                   <div className="card-body p-0">
                     <div className="table-responsive">
-                      <table className="table table-hover mb-0">
-                        <thead className="table-light">
-                          <tr><th>Borrower</th><th>Amount</th><th>Balance</th></tr>
-                        </thead>
+                      <table className="table mb-0">
+                        <thead><tr><th>Borrower</th><th>Principal</th><th>Balance</th><th>Months</th></tr></thead>
                         <tbody>
                           {activeLoans.slice(0, 5).map((l) => (
                             <tr key={l.id}>
-                              <td>{getMemberName(l.memberId)}</td>
+                              <td style={{ fontWeight: 600 }}>{getMemberName(l.memberId)}</td>
                               <td>{fmt(l.amount)}</td>
-                              <td className="text-danger fw-bold">{fmt(l.balance || 0)}</td>
+                              <td style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(l.balance || 0)}</td>
+                              <td><span className="badge-active">{l.months?.toFixed(1)} mo</span></td>
                             </tr>
                           ))}
-                          {activeLoans.length === 0 && <tr><td colSpan={3} className="text-center text-muted py-3">No active loans</td></tr>}
+                          {activeLoans.length === 0 && <tr><td colSpan={4} className="text-center py-4" style={{ color: "var(--text-muted)" }}>No active loans yet</td></tr>}
                         </tbody>
                       </table>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="col-md-6">
+              <div className="col-md-5">
                 <div className="card table-card">
-                  <div className="card-header bg-white border-bottom">
-                    <i className="fas fa-chart-pie me-2 text-primary"></i>Summary
+                  <div className="card-header">
+                    <i className="fas fa-chart-pie me-2" style={{ color: "var(--primary)" }}></i>Financial Summary
                   </div>
                   <div className="card-body">
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-muted">Total Lent Out</span>
-                      <span className="fw-bold">{fmt(totalLent)}</span>
-                    </div>
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-muted">Total Interest Earned</span>
-                      <span className="fw-bold text-success">{fmt(totalBalance - totalLent + totalCollected)}</span>
-                    </div>
-                    <div className="d-flex justify-content-between mb-3">
-                      <span className="text-muted">Total Collected</span>
-                      <span className="fw-bold text-primary">{fmt(totalCollected)}</span>
-                    </div>
-                    <div className="d-flex justify-content-between">
-                      <span className="text-muted">Outstanding Balance</span>
-                      <span className="fw-bold text-danger">{fmt(totalBalance)}</span>
-                    </div>
+                    {[
+                      { label: "Total Lent Out", value: fmt(totalLent), color: "var(--text-primary)" },
+                      { label: "Interest Earned", value: fmt(totalBalance - totalLent + totalCollected), color: "var(--success)" },
+                      { label: "Total Collected", value: fmt(totalCollected), color: "var(--primary)" },
+                      { label: "Outstanding", value: fmt(totalBalance), color: "var(--danger)" },
+                    ].map((r, i) => (
+                      <div className="summary-row" key={i}>
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>{r.label}</span>
+                        <span style={{ fontWeight: 700, color: r.color }}>{r.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -317,35 +350,31 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* MEMBERS PAGE */}
+        {/* MEMBERS */}
         {page === "members" && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h5 className="mb-0"><i className="fas fa-users me-2"></i>Members ({members.length})</h5>
+              <span className="section-title"><i className="fas fa-users me-2" style={{ color: "var(--primary)" }}></i>Members ({members.length})</span>
               <button className="btn btn-primary" onClick={() => { setEditMember(null); setMForm({ firstName: "", middleName: "", lastName: "", extension: "", birthdate: "", address: "", photo: "" }); setShowMemberModal(true); }}>
                 <i className="fas fa-plus me-1"></i>Add Member
               </button>
             </div>
             <div className="card table-card">
               <div className="table-responsive">
-                <table className="table table-hover mb-0">
-                  <thead className="table-light">
-                    <tr><th>Photo</th><th>Name</th><th>Birthdate</th><th>Address</th><th>Actions</th></tr>
-                  </thead>
+                <table className="table mb-0">
+                  <thead><tr><th>Photo</th><th>Name</th><th>Birthdate</th><th>Address</th><th>Actions</th></tr></thead>
                   <tbody>
                     {members.map((m) => (
                       <tr key={m.id}>
                         <td>
                           {m.photo ? <img src={m.photo} className="profile-photo" alt="" /> :
-                            <div className="profile-photo bg-secondary d-flex align-items-center justify-content-center text-white">
+                            <div className="profile-photo d-flex align-items-center justify-content-center" style={{ background: "var(--primary-soft)", color: "var(--primary)", fontSize: "1rem" }}>
                               <i className="fas fa-user"></i>
                             </div>}
                         </td>
-                        <td>
-                          <strong>{m.firstName} {m.middleName} {m.lastName} {m.extension}</strong>
-                        </td>
+                        <td style={{ fontWeight: 600 }}>{m.firstName} {m.middleName} {m.lastName} {m.extension}</td>
                         <td>{m.birthdate}</td>
-                        <td className="small">{m.address}</td>
+                        <td style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>{m.address}</td>
                         <td>
                           <button className="btn btn-sm btn-outline-primary me-1" onClick={() => openEditMember(m)} title="Edit">
                             <i className="fas fa-edit"></i>
@@ -356,7 +385,14 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     ))}
-                    {members.length === 0 && <tr><td colSpan={5} className="text-center text-muted py-4">No members yet. Click &quot;Add Member&quot; to get started.</td></tr>}
+                    {members.length === 0 && (
+                      <tr><td colSpan={5}>
+                        <div className="empty-state">
+                          <div><i className="fas fa-user-plus"></i></div>
+                          <p>No members yet. Click &quot;Add Member&quot; to get started.</p>
+                        </div>
+                      </td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -364,11 +400,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* LOANS PAGE */}
+        {/* LOANS */}
         {page === "loans" && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h5 className="mb-0"><i className="fas fa-file-invoice-dollar me-2"></i>Loans ({loans.length})</h5>
+              <span className="section-title"><i className="fas fa-file-invoice-dollar me-2" style={{ color: "var(--accent)" }}></i>Loans ({loans.length})</span>
               <button className="btn btn-primary" onClick={() => {
                 setLForm({ memberId: members[0]?.id || "", amount: "", borrowDate: new Date().toISOString().split("T")[0], interestStartDate: new Date().toISOString().split("T")[0], signature: "" });
                 setShowLoanModal(true);
@@ -379,22 +415,20 @@ export default function Dashboard() {
             </div>
             <div className="card table-card">
               <div className="table-responsive">
-                <table className="table table-hover mb-0">
-                  <thead className="table-light">
-                    <tr><th>Borrower</th><th>Principal</th><th>Borrow Date</th><th>Months</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr>
-                  </thead>
+                <table className="table mb-0">
+                  <thead><tr><th>Borrower</th><th>Principal</th><th>Date</th><th>Months</th><th>Total Due</th><th>Paid</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody>
                     {loans.map((l) => (
                       <tr key={l.id}>
-                        <td className="fw-bold">{getMemberName(l.memberId)}</td>
+                        <td style={{ fontWeight: 600 }}>{getMemberName(l.memberId)}</td>
                         <td>{fmt(l.amount)}</td>
                         <td>{l.borrowDate}</td>
                         <td>{l.months?.toFixed(1)}</td>
                         <td>{fmt(l.totalDue || 0)}</td>
-                        <td className="text-success">{fmt(l.totalPaid || 0)}</td>
-                        <td className="text-danger fw-bold">{fmt(l.balance || 0)}</td>
+                        <td style={{ color: "var(--success)" }}>{fmt(l.totalPaid || 0)}</td>
+                        <td style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(l.balance || 0)}</td>
                         <td>
-                          <span className={`badge ${l.status === "paid" ? "bg-success" : "bg-warning text-dark"}`}>
+                          <span className={l.status === "paid" ? "badge-paid" : "badge-active"}>
                             {l.status === "paid" ? "Paid" : "Active"}
                           </span>
                         </td>
@@ -421,9 +455,109 @@ export default function Dashboard() {
                         </td>
                       </tr>
                     ))}
-                    {loans.length === 0 && <tr><td colSpan={9} className="text-center text-muted py-4">No loans yet.</td></tr>}
+                    {loans.length === 0 && (
+                      <tr><td colSpan={9}>
+                        <div className="empty-state">
+                          <div><i className="fas fa-file-invoice-dollar"></i></div>
+                          <p>No loans yet.</p>
+                        </div>
+                      </td></tr>
+                    )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ACCOUNTING */}
+        {page === "accounting" && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <span className="section-title"><i className="fas fa-calculator me-2" style={{ color: "var(--info)" }}></i>Accounting</span>
+              <button className="btn btn-primary" onClick={() => { setTxForm({ type: "income", category: "", description: "", amount: "", date: new Date().toISOString().split("T")[0] }); setShowTxModal(true); }}>
+                <i className="fas fa-plus me-1"></i>New Transaction
+              </button>
+            </div>
+
+            {/* Accounting Summary Cards */}
+            <div className="row g-3 mb-4">
+              <div className="col-md-4">
+                <div className="accounting-card">
+                  <div className="d-flex align-items-center mb-2">
+                    <div className="icon-box icon-green me-3"><i className="fas fa-arrow-down"></i></div>
+                    <div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Total Income</div>
+                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--success)" }}>{fmt(totalIncome)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="accounting-card">
+                  <div className="d-flex align-items-center mb-2">
+                    <div className="icon-box icon-red me-3"><i className="fas fa-arrow-up"></i></div>
+                    <div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Total Expenses</div>
+                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--danger)" }}>{fmt(totalExpense)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="accounting-card">
+                  <div className="d-flex align-items-center mb-2">
+                    <div className="icon-box icon-purple me-3"><i className="fas fa-wallet"></i></div>
+                    <div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>Net Income</div>
+                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: netIncome >= 0 ? "var(--success)" : "var(--danger)" }}>{fmt(netIncome)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Transaction List */}
+            <div className="card table-card">
+              <div className="card-header d-flex justify-content-between align-items-center">
+                <span><i className="fas fa-list me-2" style={{ color: "var(--primary)" }}></i>Transactions</span>
+              </div>
+              <div className="card-body p-0">
+                <div className="table-responsive">
+                  <table className="table mb-0">
+                    <thead><tr><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Date</th><th>Action</th></tr></thead>
+                    <tbody>
+                      {transactions.map((t) => (
+                        <tr key={t.id}>
+                          <td>
+                            <span className={t.type === "income" ? "badge-paid" : "badge-active"}>
+                              {t.type === "income" ? "Income" : "Expense"}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 500 }}>{t.category}</td>
+                          <td style={{ color: "var(--text-muted)", fontSize: "0.88rem" }}>{t.description}</td>
+                          <td style={{ fontWeight: 600, color: t.type === "income" ? "var(--success)" : "var(--danger)" }}>
+                            {t.type === "income" ? "+" : "-"}{fmt(t.amount)}
+                          </td>
+                          <td>{t.date}</td>
+                          <td>
+                            <button className="btn btn-sm btn-outline-danger" onClick={() => deleteTx(t.id)}>
+                              <i className="fas fa-trash"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {transactions.length === 0 && (
+                        <tr><td colSpan={6}>
+                          <div className="empty-state">
+                            <div><i className="fas fa-receipt"></i></div>
+                            <p>No transactions yet.</p>
+                          </div>
+                        </td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -432,7 +566,7 @@ export default function Dashboard() {
 
       {/* MEMBER MODAL */}
       {showMemberModal && (
-        <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
@@ -443,7 +577,7 @@ export default function Dashboard() {
                 <div className="row g-3">
                   <div className="col-md-4">
                     <label className="form-label">First Name *</label>
-                    <input className="form-control" value={mForm.firstName} onChange={(e) => setMForm({ ...mForm, firstName: e.target.value })} required />
+                    <input className="form-control" value={mForm.firstName} onChange={(e) => setMForm({ ...mForm, firstName: e.target.value })} />
                   </div>
                   <div className="col-md-4">
                     <label className="form-label">Middle Name</label>
@@ -451,7 +585,7 @@ export default function Dashboard() {
                   </div>
                   <div className="col-md-3">
                     <label className="form-label">Last Name *</label>
-                    <input className="form-control" value={mForm.lastName} onChange={(e) => setMForm({ ...mForm, lastName: e.target.value })} required />
+                    <input className="form-control" value={mForm.lastName} onChange={(e) => setMForm({ ...mForm, lastName: e.target.value })} />
                   </div>
                   <div className="col-md-1">
                     <label className="form-label">Ext.</label>
@@ -466,14 +600,14 @@ export default function Dashboard() {
                     <input className="form-control" value={mForm.address} onChange={(e) => setMForm({ ...mForm, address: e.target.value })} />
                   </div>
                   <div className="col-12">
-                    <label className="form-label">Profile Photo (max ~50KB)</label>
+                    <label className="form-label">Profile Photo</label>
                     <input type="file" className="form-control" accept="image/*" onChange={handlePhoto} />
                     {mForm.photo && <img src={mForm.photo} className="profile-photo-lg mt-2" alt="preview" />}
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowMemberModal(false)}>Cancel</button>
+                <button className="btn btn-outline-secondary" onClick={() => setShowMemberModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={saveMember} disabled={!mForm.firstName || !mForm.lastName}>
                   <i className="fas fa-save me-1"></i>{editMember ? "Update" : "Save"}
                 </button>
@@ -485,7 +619,7 @@ export default function Dashboard() {
 
       {/* LOAN MODAL */}
       {showLoanModal && (
-        <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
@@ -514,17 +648,17 @@ export default function Dashboard() {
                     <input type="date" className="form-control" value={lForm.interestStartDate} onChange={(e) => setLForm({ ...lForm, interestStartDate: e.target.value })} />
                   </div>
                   <div className="col-12">
-                    <label className="form-label">Borrower&apos;s Digital Signature</label>
+                    <label className="form-label">Digital Signature</label>
                     <canvas ref={sigCanvas} width={500} height={150} className="signature-pad w-100"
                       onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw} />
                     <button className="btn btn-sm btn-outline-secondary mt-1" onClick={clearSig}>
-                      <i className="fas fa-eraser me-1"></i>Clear Signature
+                      <i className="fas fa-eraser me-1"></i>Clear
                     </button>
                   </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowLoanModal(false)}>Cancel</button>
+                <button className="btn btn-outline-secondary" onClick={() => setShowLoanModal(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={saveLoan} disabled={!lForm.memberId || !lForm.amount}>
                   <i className="fas fa-save me-1"></i>Create Loan
                 </button>
@@ -536,7 +670,7 @@ export default function Dashboard() {
 
       {/* PAYMENT MODAL */}
       {showPayModal && payLoan && (
-        <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }}>
+        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
@@ -545,7 +679,7 @@ export default function Dashboard() {
               </div>
               <div className="modal-body">
                 <p><strong>Borrower:</strong> {getMemberName(payLoan.memberId)}</p>
-                <p><strong>Balance:</strong> <span className="text-danger">{fmt(payLoan.balance || 0)}</span></p>
+                <p><strong>Balance:</strong> <span style={{ color: "var(--danger)", fontWeight: 600 }}>{fmt(payLoan.balance || 0)}</span></p>
                 <div className="mb-3">
                   <label className="form-label">Payment Amount (PHP)</label>
                   <input type="number" className="form-control" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
@@ -556,7 +690,7 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-secondary" onClick={() => setShowPayModal(false)}>Cancel</button>
+                <button className="btn btn-outline-secondary" onClick={() => setShowPayModal(false)}>Cancel</button>
                 <button className="btn btn-success" onClick={makePayment} disabled={!payAmount}>
                   <i className="fas fa-check me-1"></i>Record Payment
                 </button>
@@ -565,6 +699,54 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* TRANSACTION MODAL */}
+      {showTxModal && (
+        <div className="modal show d-block" style={{ background: "rgba(61,53,86,0.4)" }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title"><i className="fas fa-receipt me-2"></i>New Transaction</h5>
+                <button className="btn-close" onClick={() => setShowTxModal(false)}></button>
+              </div>
+              <div className="modal-body">
+                <div className="row g-3">
+                  <div className="col-md-6">
+                    <label className="form-label">Type</label>
+                    <select className="form-select" value={txForm.type} onChange={(e) => setTxForm({ ...txForm, type: e.target.value as "income" | "expense" })}>
+                      <option value="income">Income</option>
+                      <option value="expense">Expense</option>
+                    </select>
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Category</label>
+                    <input className="form-control" value={txForm.category} onChange={(e) => setTxForm({ ...txForm, category: e.target.value })}
+                      placeholder={txForm.type === "income" ? "e.g. Loan Payment, Interest" : "e.g. Operating, Transport"} />
+                  </div>
+                  <div className="col-12">
+                    <label className="form-label">Description</label>
+                    <input className="form-control" value={txForm.description} onChange={(e) => setTxForm({ ...txForm, description: e.target.value })} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Amount (PHP)</label>
+                    <input type="number" className="form-control" value={txForm.amount} onChange={(e) => setTxForm({ ...txForm, amount: e.target.value })} />
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Date</label>
+                    <input type="date" className="form-control" value={txForm.date} onChange={(e) => setTxForm({ ...txForm, date: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-outline-secondary" onClick={() => setShowTxModal(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={saveTx} disabled={!txForm.category || !txForm.amount}>
+                  <i className="fas fa-save me-1"></i>Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-      }
+}
