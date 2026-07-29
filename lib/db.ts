@@ -35,17 +35,21 @@ export interface Member {
   extension: string;
   birthdate: string;
   address: string;
-  photo: string; // base64, max ~50kb
+  photo: string;
+  shares: number;
   createdAt: string;
 }
 
 export interface Loan {
   id: string;
   memberId: string;
+  borrowerType: "member" | "non-member";
+  borrowerName: string;
+  taggedMemberId: string;
   amount: number;
   borrowDate: string;
   interestStartDate: string;
-  signature: string; // base64 digital signature
+  signature: string;
   status: "active" | "paid";
   payments: Payment[];
   createdAt: string;
