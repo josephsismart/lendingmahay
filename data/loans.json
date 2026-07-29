@@ -1,1 +1,91 @@
-[]
+[
+  {
+    "id": "l1",
+    "memberId": "m1",
+    "amount": 10000,
+    "borrowDate": "2025-01-15",
+    "interestStartDate": "2025-01-15",
+    "signature": "",
+    "status": "active",
+    "payments": [
+      {
+        "id": "p1",
+        "amount": 3000,
+        "date": "2025-03-15"
+      },
+      {
+        "id": "p2",
+        "amount": 2000,
+        "date": "2025-05-10"
+      }
+    ],
+    "createdAt": "2025-01-15T08:00:00Z"
+  },
+  {
+    "id": "l2",
+    "memberId": "m2",
+    "amount": 25000,
+    "borrowDate": "2025-03-01",
+    "interestStartDate": "2025-03-01",
+    "signature": "",
+    "status": "active",
+    "payments": [
+      {
+        "id": "p3",
+        "amount": 5000,
+        "date": "2025-04-01"
+      }
+    ],
+    "createdAt": "2025-03-01T10:00:00Z"
+  },
+  {
+    "id": "l3",
+    "memberId": "m3",
+    "amount": 5000,
+    "borrowDate": "2024-10-01",
+    "interestStartDate": "2024-10-01",
+    "signature": "",
+    "status": "paid",
+    "payments": [
+      {
+        "id": "p4",
+        "amount": 3000,
+        "date": "2024-12-01"
+      },
+      {
+        "id": "p5",
+        "amount": 4500,
+        "date": "2025-02-01"
+      }
+    ],
+    "createdAt": "2024-10-01T09:00:00Z"
+  },
+  {
+    "id": "l4",
+    "memberId": "m4",
+    "amount": 15000,
+    "borrowDate": "2025-05-10",
+    "interestStartDate": "2025-05-10",
+    "signature": "",
+    "status": "active",
+    "payments": [],
+    "createdAt": "2025-05-10T07:30:00Z"
+  },
+  {
+    "id": "l5",
+    "memberId": "m5",
+    "amount": 8000,
+    "borrowDate": "2025-06-01",
+    "interestStartDate": "2025-06-01",
+    "signature": "",
+    "status": "active",
+    "payments": [
+      {
+        "id": "p6",
+        "amount": 2000,
+        "date": "2025-07-01"
+      }
+    ],
+    "createdAt": "2025-06-01T10:00:00Z"
+  }
+]
