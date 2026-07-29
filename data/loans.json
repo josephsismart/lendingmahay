@@ -2,67 +2,59 @@
   {
     "id": "l1",
     "memberId": "m1",
+    "borrowerType": "member",
+    "borrowerName": "MARIA DELA CRUZ",
+    "taggedMemberId": "",
     "amount": 10000,
     "borrowDate": "2025-01-15",
     "interestStartDate": "2025-01-15",
     "signature": "",
     "status": "active",
     "payments": [
-      {
-        "id": "p1",
-        "amount": 3000,
-        "date": "2025-03-15"
-      },
-      {
-        "id": "p2",
-        "amount": 2000,
-        "date": "2025-05-10"
-      }
+      { "id": "p1", "amount": 3000, "date": "2025-03-15" },
+      { "id": "p2", "amount": 2000, "date": "2025-05-10" }
     ],
     "createdAt": "2025-01-15T08:00:00Z"
   },
   {
     "id": "l2",
     "memberId": "m2",
+    "borrowerType": "member",
+    "borrowerName": "JUAN GARCIA JR.",
+    "taggedMemberId": "",
     "amount": 25000,
     "borrowDate": "2025-03-01",
     "interestStartDate": "2025-03-01",
     "signature": "",
     "status": "active",
     "payments": [
-      {
-        "id": "p3",
-        "amount": 5000,
-        "date": "2025-04-01"
-      }
+      { "id": "p3", "amount": 5000, "date": "2025-04-01" }
     ],
     "createdAt": "2025-03-01T10:00:00Z"
   },
   {
     "id": "l3",
     "memberId": "m3",
+    "borrowerType": "member",
+    "borrowerName": "ANA BAUTISTA",
+    "taggedMemberId": "",
     "amount": 5000,
     "borrowDate": "2024-10-01",
     "interestStartDate": "2024-10-01",
     "signature": "",
     "status": "paid",
     "payments": [
-      {
-        "id": "p4",
-        "amount": 3000,
-        "date": "2024-12-01"
-      },
-      {
-        "id": "p5",
-        "amount": 4500,
-        "date": "2025-02-01"
-      }
+      { "id": "p4", "amount": 3000, "date": "2024-12-01" },
+      { "id": "p5", "amount": 4500, "date": "2025-02-01" }
     ],
     "createdAt": "2024-10-01T09:00:00Z"
   },
   {
     "id": "l4",
     "memberId": "m4",
+    "borrowerType": "member",
+    "borrowerName": "PEDRO MENDOZA",
+    "taggedMemberId": "",
     "amount": 15000,
     "borrowDate": "2025-05-10",
     "interestStartDate": "2025-05-10",
@@ -74,18 +66,31 @@
   {
     "id": "l5",
     "memberId": "m5",
+    "borrowerType": "member",
+    "borrowerName": "ELENA VILLANUEVA",
+    "taggedMemberId": "",
     "amount": 8000,
     "borrowDate": "2025-06-01",
     "interestStartDate": "2025-06-01",
     "signature": "",
     "status": "active",
     "payments": [
-      {
-        "id": "p6",
-        "amount": 2000,
-        "date": "2025-07-01"
-      }
+      { "id": "p6", "amount": 2000, "date": "2025-07-01" }
     ],
     "createdAt": "2025-06-01T10:00:00Z"
+  },
+  {
+    "id": "l6",
+    "memberId": "",
+    "borrowerType": "non-member",
+    "borrowerName": "ROBERTO SANTOS",
+    "taggedMemberId": "m1",
+    "amount": 5000,
+    "borrowDate": "2025-07-01",
+    "interestStartDate": "2025-07-01",
+    "signature": "",
+    "status": "active",
+    "payments": [],
+    "createdAt": "2025-07-01T08:00:00Z"
   }
 ]
