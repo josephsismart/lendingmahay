@@ -4,7 +4,7 @@ import { readData, writeData, Loan, calculateInterest } from "@/lib/db";
 export async function GET() {
   const loans = readData<Loan>("loans");
   const enriched = loans.map((loan) => {
-    if (loan.status === "paid") return { ...loan, totalDue: 0, interestAmount: 0, months: 0, balance: 0 };
+    if (loan.status === "paid") return { ...loan, totalDue: 0, interestAmount: 0, months: 0, balance: 0, totalPaid: loan.payments.reduce((s, p) => s + p.amount, 0) };
     const calc = calculateInterest(loan.amount, loan.interestStartDate);
     const totalPaid = loan.payments.reduce((s, p) => s + p.amount, 0);
     return { ...loan, ...calc, totalPaid, balance: Math.max(0, calc.totalDue - totalPaid) };
@@ -17,7 +17,10 @@ export async function POST(request: NextRequest) {
   const loans = readData<Loan>("loans");
   const loan: Loan = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    memberId: body.memberId,
+    memberId: body.memberId || "",
+    borrowerType: body.borrowerType || "member",
+    borrowerName: (body.borrowerName || "").toUpperCase(),
+    taggedMemberId: body.taggedMemberId || "",
     amount: Number(body.amount),
     borrowDate: body.borrowDate,
     interestStartDate: body.interestStartDate || body.borrowDate,
