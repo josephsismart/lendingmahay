@@ -46,7 +46,7 @@ type Page = "dashboard" | "shareholders" | "loans" | "accounting";
 const SHARE_VALUE = 1000;
 
 function formatPeso(amount: number): string {
-  return "â±" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "P" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function DashboardPage() {
@@ -1184,7 +1184,7 @@ export default function DashboardPage() {
                 <div className="col-md-4">
                   <label className="form-label fw-semibold">LOAN AMOUNT</label>
                   <div className="input-group">
-                    <span className="input-group-text">â±</span>
+                    <span className="input-group-text">P</span>
                     <input
                       type="number"
                       className="form-control"
@@ -1287,7 +1287,7 @@ export default function DashboardPage() {
               )}
               <label className="form-label fw-semibold">PAYMENT AMOUNT</label>
               <div className="input-group">
-                <span className="input-group-text">â±</span>
+                <span className="input-group-text">P</span>
                 <input
                   type="number"
                   className="form-control"
