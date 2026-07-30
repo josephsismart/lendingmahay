@@ -41,7 +41,7 @@ interface Loan {
   createdAt: string;
 }
 
-type Page = "dashboard" | "shareholders" | "loans" | "accounting";
+type Page = "dashboard" | "shareholders" | "loans" | "payments" | "accounting";
 
 const SHARE_VALUE = 1000;
 
@@ -1285,6 +1285,16 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
+              <div className="mb-3">
+                <label className="form-label fw-semibold">SELECT LOAN</label>
+                <select className="form-select" value={paymentLoanId} onChange={(e) => setPaymentLoanId(e.target.value)}>
+                  {loans.filter((l) => l.status === "active").map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.borrowerType === "non-member" ? `(NON-MEMBER) ${l.borrowerName.toUpperCase()}` : l.borrowerName.toUpperCase()} - BAL: {formatPeso(l.balance)}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <label className="form-label fw-semibold">PAYMENT AMOUNT</label>
               <div className="input-group">
                 <span className="input-group-text">P</span>
@@ -1326,6 +1336,146 @@ export default function DashboardPage() {
     }
   }, [cameraActive, cameraStream]);
 
+
+  const renderPayments = () => {
+    const allPayments = loans.flatMap((loan) =>
+      (loan.payments || []).map((p: any) => ({
+        ...p,
+        borrowerName: loan.borrowerName,
+        borrowerType: loan.borrowerType,
+        loanAmount: loan.amount,
+        loanId: loan.id,
+        remainingBalance: loan.balance,
+        loanStatus: loan.status,
+      }))
+    );
+
+    const totalCollected = allPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
+    const totalOutstanding = loans
+      .filter((l) => l.status === "active")
+      .reduce((sum, l) => sum + l.balance, 0);
+
+    return (
+      <>
+        <div className="row g-3 mb-4">
+          <div className="col-md-4">
+            <div className="stat-card card">
+              <div className="card-body">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="icon-box icon-green">
+                    <i className="fas fa-coins"></i>
+                  </div>
+                  <div>
+                    <p className="text-muted mb-1">TOTAL COLLECTED</p>
+                    <h3 className="mb-0">{formatPeso(totalCollected)}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="stat-card card">
+              <div className="card-body">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="icon-box icon-blue">
+                    <i className="fas fa-receipt"></i>
+                  </div>
+                  <div>
+                    <p className="text-muted mb-1">TOTAL TRANSACTIONS</p>
+                    <h3 className="mb-0">{allPayments.length}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="stat-card card">
+              <div className="card-body">
+                <div className="d-flex align-items-center gap-3">
+                  <div className="icon-box icon-red">
+                    <i className="fas fa-exclamation-circle"></i>
+                  </div>
+                  <div>
+                    <p className="text-muted mb-1">OUTSTANDING BALANCE</p>
+                    <h3 className="mb-0">{formatPeso(totalOutstanding)}</h3>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="table-card card">
+          <div className="card-header d-flex justify-content-between align-items-center">
+            <span>PAYMENT HISTORY</span>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                const firstActive = loans.find((l) => l.status === "active");
+                if (firstActive) {
+                  setPaymentLoanId(firstActive.id);
+                  setPaymentAmount("");
+                  setShowPaymentModal(true);
+                }
+              }}
+            >
+              <i className="fas fa-plus me-1"></i> RECORD PAYMENT
+            </button>
+          </div>
+          <div className="card-body p-0">
+            {allPayments.length === 0 ? (
+              <div className="empty-state">
+                <i className="fas fa-money-bill-wave d-block"></i>
+                <p>NO PAYMENTS RECORDED YET</p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>BORROWER</th>
+                      <th>TYPE</th>
+                      <th>AMOUNT PAID</th>
+                      <th>DATE PAID</th>
+                      <th>LOAN AMOUNT</th>
+                      <th>REMAINING</th>
+                      <th>STATUS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allPayments
+                      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((p: any, i: number) => (
+                        <tr key={p.id || i}>
+                          <td>{i + 1}</td>
+                          <td className="fw-semibold">{p.borrowerName.toUpperCase()}</td>
+                          <td>
+                            <span className={`badge ${p.borrowerType === "member" ? "badge-paid" : "badge-active"}`}>
+                              {p.borrowerType === "member" ? "MEMBER" : "NON-MEMBER"}
+                            </span>
+                          </td>
+                          <td className="text-success fw-semibold">{formatPeso(p.amount)}</td>
+                          <td>{new Date(p.date).toLocaleDateString()}</td>
+                          <td>{formatPeso(p.loanAmount)}</td>
+                          <td className="fw-semibold">{formatPeso(p.remainingBalance)}</td>
+                          <td>
+                            <span className={`badge ${p.loanStatus === "active" ? "badge-active" : "badge-paid"}`}>
+                              {p.loanStatus.toUpperCase()}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  };
+
   const renderCurrentPage = () => {
     switch (currentPage) {
       case "dashboard":
@@ -1334,6 +1484,8 @@ export default function DashboardPage() {
         return renderShareholders();
       case "loans":
         return renderLoans();
+      case "payments":
+        return renderPayments();
       case "accounting":
         return renderAccounting();
       default:
