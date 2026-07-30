@@ -572,7 +572,7 @@ export default function DashboardPage() {
                         <tr key={m.id}>
                           <td>
                               <div className="d-flex align-items-center">
-                              {.photo ? (
+                              {m.photo ? (
                                 <img src={m.photo} className="profile-photo rounded-circle me-2" alt="" style={{ width: 32, height: 32, objectFit: "cover" }} />
                               ) : (
                                 <div className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white me-2" style={{ width: 32, height: 32, fontSize: 14 }}>
