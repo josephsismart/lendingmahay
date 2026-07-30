@@ -46,7 +46,7 @@ type Page = "dashboard" | "shareholders" | "loans" | "accounting";
 const SHARE_VALUE = 1000;
 
 function formatPeso(amount: number): string {
-  return "₱" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "â±" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function DashboardPage() {
@@ -54,7 +54,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(typeof window !== "undefined" ? window.innerWidth >= 768 : true);
 
   // Member modal state
   const [showMemberModal, setShowMemberModal] = useState(false);
@@ -417,52 +417,56 @@ export default function DashboardPage() {
 
   // Render sidebar
   const renderSidebar = () => (
-    <div className={`sidebar ${sidebarOpen ? "" : "collapsed"}`} style={{ width: sidebarOpen ? 250 : 0, minHeight: "100vh", position: "fixed", left: 0, top: 0, zIndex: 1000, transition: "width 0.3s", overflow: "hidden" }}>
-      <div className="sidebar-brand p-3 text-center">
-        <h4 className="text-white mb-0">
-          <i className="fas fa-landmark me-2"></i>
-          LENDINGMAHAY
-        </h4>
-        <small className="text-white-50">LENDING MANAGEMENT SYSTEM</small>
+    <>
+      {sidebarOpen && <div className="sidebar-overlay show d-md-none" onClick={() => setSidebarOpen(false)} />}
+      <div className={`sidebar ${sidebarOpen ? "show" : ""}`}>
+        <div className="sidebar-brand">
+          <div>
+            <h4>
+              <i className="fas fa-landmark me-2"></i>
+              LENDINGMAHAY
+            </h4>
+            <small>LOAN MANAGEMENT SYSTEM</small>
+          </div>
+        </div>
+        <hr style={{ borderColor: "rgba(255,255,255,0.1)", margin: "0 16px 8px" }} />
+        <nav className="nav flex-column">
+          {navItems.map((item) => (
+            <button
+              key={item.page}
+              className={`nav-link ${currentPage === item.page ? "active" : ""}`}
+              onClick={() => { setCurrentPage(item.page); if (window.innerWidth < 768) setSidebarOpen(false); }}
+            >
+              <i className={`fas ${item.icon}`}></i>
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </div>
-      <hr className="bg-light mx-3 my-2" />
-      <nav className="nav flex-column px-2">
-        {navItems.map((item) => (
-          <button
-            key={item.page}
-            className={`nav-link text-start border-0 rounded px-3 py-2 mb-1 ${currentPage === item.page ? "active bg-white bg-opacity-25 text-white fw-bold" : "text-white-50"}`}
-            style={{ background: currentPage === item.page ? "rgba(255,255,255,0.15)" : "transparent", cursor: "pointer" }}
-            onClick={() => setCurrentPage(item.page)}
-          >
-            <i className={`fas ${item.icon} me-2`} style={{ width: 20, textAlign: "center" }}></i>
-            {item.label}
-          </button>
-        ))}
-      </nav>
-    </div>
+    </>
   );
 
   // Render top bar
   const renderTopBar = () => (
-    <div className="top-bar d-flex align-items-center justify-content-between px-4 py-3 bg-white shadow-sm" style={{ marginLeft: sidebarOpen ? 250 : 0, transition: "margin-left 0.3s" }}>
+    <div className="top-bar">
       <div className="d-flex align-items-center">
         <button className="btn btn-outline-secondary me-3 d-md-none" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <i className="fas fa-bars"></i>
         </button>
-        <h5 className="mb-0 fw-bold text-uppercase">
+        <h5>
           {currentPage === "shareholders" ? "SHAREHOLDERS" : currentPage.toUpperCase()}
         </h5>
       </div>
       <div className="d-flex align-items-center">
-        <span className="text-muted me-3">
+        <span className="text-muted me-3" style={{ fontSize: "0.78rem" }}>
           <i className="fas fa-calendar me-1"></i>
           {new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }).toUpperCase()}
         </span>
         <div className="d-flex align-items-center">
-          <div className="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white" style={{ width: 36, height: 36 }}>
+          <div className="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white" style={{ width: 32, height: 32, fontSize: "0.8rem" }}>
             <i className="fas fa-user"></i>
           </div>
-          <span className="ms-2 fw-semibold">ADMIN</span>
+          <span className="ms-2 fw-semibold" style={{ fontSize: "0.82rem" }}>ADMIN</span>
         </div>
       </div>
     </div>
@@ -661,7 +665,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {members.map((m) => (
-                    <tr key={m.id}>
+                             <tr key={m.id}>
                       <td>
                         {m.photo ? (
                           <img src={m.photo} className="profile-photo rounded-circle" alt="" style={{ width: 40, height: 40, objectFit: "cover" }} />
@@ -745,7 +749,7 @@ export default function DashboardPage() {
                         <td className="text-success">{formatPeso(l.totalPaid)}</td>
                         <td className="text-danger fw-bold">{formatPeso(l.balance)}</td>
                         <td>
-                          <span className={l.status === "active" ? "badge badge-active" : "badge badge-paid"}>
+                            <span className={l.status === "active" ? "badge badge-active" : "badge badge-paid"}>
                             {l.status.toUpperCase()}
                           </span>
                         </td>
@@ -1136,9 +1140,9 @@ export default function DashboardPage() {
                 )}
 
                 <div className="col-md-4">
-                  <label className="form-label fw-semibold">LOAN AMOUNT</label>
+                        <label className="form-label fw-semibold">LOAN AMOUNT</label>
                   <div className="input-group">
-                    <span className="input-group-text">₱</span>
+                    <span className="input-group-text">â±</span>
                     <input
                       type="number"
                       className="form-control"
@@ -1241,7 +1245,7 @@ export default function DashboardPage() {
               )}
               <label className="form-label fw-semibold">PAYMENT AMOUNT</label>
               <div className="input-group">
-                <span className="input-group-text">₱</span>
+                <span className="input-group-text">â±</span>
                 <input
                   type="number"
                   className="form-control"
@@ -1309,13 +1313,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="d-flex" style={{ minHeight: "100vh", backgroundColor: "#f8f9fa" }}>
+    <div style={{ minHeight: "100vh" }}>
       {renderSidebar()}
-      <div className="flex-grow-1" style={{ marginLeft: sidebarOpen ? 250 : 0, transition: "margin-left 0.3s" }}>
+      <div className="main-content" style={{ marginLeft: sidebarOpen ? 240 : 0 }}>
         {renderTopBar()}
-        <div className="main-content p-4">
-          {renderCurrentPage()}
-        </div>
+        {renderCurrentPage()}
       </div>
       {renderMemberModal()}
       {renderLoanModal()}
