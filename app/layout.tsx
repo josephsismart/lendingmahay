@@ -7,23 +7,20 @@ export const metadata: Metadata = {
   title: "LENDINGMAHAY - LOAN MANAGEMENT",
   description: "LENDING MANAGEMENT SYSTEM FOR TRACKING LOANS, PAYMENTS, AND SHAREHOLDERS",
   icons: {
-    icon: [
-      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
-      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
-    ],
-    shortcut: "/favicon.ico",
+    icon: "/1785375121792_image.png",
+    apple: "/1785375121792_image.png",
   },
   openGraph: {
     title: "LENDINGMAHAY - LOAN MANAGEMENT",
     description: "LENDING MANAGEMENT SYSTEM FOR TRACKING LOANS, PAYMENTS, AND SHAREHOLDERS",
-    images: ["/og-image.png"],
+    images: ["/1785375121792_image.png"],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "LENDINGMAHAY - LOAN MANAGEMENT",
     description: "LENDING MANAGEMENT SYSTEM FOR TRACKING LOANS, PAYMENTS, AND SHAREHOLDERS",
-    images: ["/og-image.png"],
+    images: ["/1785375121792_image.png"],
   },
 };
 
