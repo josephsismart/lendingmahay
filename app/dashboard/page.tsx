@@ -44,6 +44,21 @@ interface Loan {
 type Page = "dashboard" | "shareholders" | "loans" | "payments" | "accounting";
 
 const SHARE_VALUE = 1000;
+const SHARES_START_DATE = "2024-12-01"; // When shares program started
+const SHARE_INTEREST_RATE = 0.10; // 10% per month compound interest for late joiners
+
+function getMonthsBehind(memberCreatedAt: string): number {
+  const start = new Date(SHARES_START_DATE);
+  const joined = new Date(memberCreatedAt);
+  if (joined <= start) return 0;
+  const months = (joined.getFullYear() - start.getFullYear()) * 12 + (joined.getMonth() - start.getMonth());
+  return Math.max(0, months);
+}
+
+function getCompoundedShareValue(shares: number, monthsBehind: number): number {
+  if (monthsBehind <= 0) return shares * SHARE_VALUE;
+  return shares * SHARE_VALUE * Math.pow(1 + SHARE_INTEREST_RATE, monthsBehind);
+}
 
 function formatPeso(amount: number): string {
   return "P" + amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -662,6 +677,9 @@ export default function DashboardPage() {
                     <th className="border-0">BIRTHDATE</th>
                     <th className="border-0">SHARES</th>
                     <th className="border-0">SHARE VALUE</th>
+                    <th className="border-0">MONTHS BEHIND</th>
+                    <th className="border-0">INTEREST</th>
+                    <th className="border-0">COMPOUNDED VALUE</th>
                     <th className="border-0">ACTIONS</th>
                   </tr>
                 </thead>
@@ -684,6 +702,9 @@ export default function DashboardPage() {
                       <td>{m.birthdate ? new Date(m.birthdate).toLocaleDateString("en-PH").toUpperCase() : "N/A"}</td>
                       <td>{m.shares}</td>
                       <td className="fw-bold">{formatPeso(m.shares * SHARE_VALUE)}</td>
+                      <td>{(() => { const mb = getMonthsBehind(m.createdAt); return mb > 0 ? <span className="badge bg-warning text-dark">{mb} MO</span> : <span className="badge bg-success">ON TIME</span>; })()}</td>
+                      <td>{(() => { const mb = getMonthsBehind(m.createdAt); const cv = getCompoundedShareValue(m.shares, mb); return mb > 0 ? <span className="text-danger fw-semibold">{formatPeso(cv - m.shares * SHARE_VALUE)}</span> : <span className="text-muted">P0.00</span>; })()}</td>
+                      <td className="fw-bold">{(() => { const mb = getMonthsBehind(m.createdAt); return formatPeso(getCompoundedShareValue(m.shares, mb)); })()}</td>
                       <td>
                         <button className="btn btn-sm btn-outline-primary me-1" onClick={() => openEditMember(m)} title="EDIT">
                           <i className="fas fa-edit"></i>
