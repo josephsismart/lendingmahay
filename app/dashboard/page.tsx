@@ -54,7 +54,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(typeof window !== "undefined" ? window.innerWidth >= 768 : true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Member modal state
   const [showMemberModal, setShowMemberModal] = useState(false);
@@ -418,7 +418,7 @@ export default function DashboardPage() {
   // Render sidebar
   const renderSidebar = () => (
     <>
-      {sidebarOpen && <div className="sidebar-overlay show d-md-none" onClick={() => setSidebarOpen(false)} />}
+      {sidebarOpen && <div className="sidebar-overlay show" onClick={() => setSidebarOpen(false)} />}
       <div className={`sidebar ${sidebarOpen ? "show" : ""}`}>
         <div className="sidebar-brand">
           <div>
@@ -435,7 +435,7 @@ export default function DashboardPage() {
             <button
               key={item.page}
               className={`nav-link ${currentPage === item.page ? "active" : ""}`}
-              onClick={() => { setCurrentPage(item.page); if (window.innerWidth < 768) setSidebarOpen(false); }}
+              onClick={() => { setCurrentPage(item.page); setSidebarOpen(false); }}
             >
               <i className={`fas ${item.icon}`}></i>
               {item.label}
@@ -450,8 +450,8 @@ export default function DashboardPage() {
   const renderTopBar = () => (
     <div className="top-bar">
       <div className="d-flex align-items-center">
-        <button className="btn btn-outline-secondary me-3 d-md-none" onClick={() => setSidebarOpen(!sidebarOpen)}>
-          <i className="fas fa-bars"></i>
+        <button className="btn btn-outline-secondary me-3" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <i className={`fas ${sidebarOpen ? "fa-times" : "fa-bars"}`}></i>
         </button>
         <h5>
           {currentPage === "shareholders" ? "SHAREHOLDERS" : currentPage.toUpperCase()}
@@ -571,8 +571,8 @@ export default function DashboardPage() {
                       {members.slice(0, 5).map((m) => (
                         <tr key={m.id}>
                           <td>
-                            <div className="d-flex align-items-center">
-                              {m.photo ? (
+                              <div className="d-flex align-items-center">
+                              {.photo ? (
                                 <img src={m.photo} className="profile-photo rounded-circle me-2" alt="" style={{ width: 32, height: 32, objectFit: "cover" }} />
                               ) : (
                                 <div className="rounded-circle bg-secondary d-flex align-items-center justify-content-center text-white me-2" style={{ width: 32, height: 32, fontSize: 14 }}>
@@ -614,7 +614,7 @@ export default function DashboardPage() {
                         <th className="border-0">BALANCE</th>
                       </tr>
                     </thead>
-                    <tbody>
+                            <tbody>
                       {activeLoans.slice(0, 5).map((l) => (
                         <tr key={l.id}>
                           <td>{l.borrowerName.toUpperCase()}</td>
@@ -665,7 +665,7 @@ export default function DashboardPage() {
                 </thead>
                 <tbody>
                   {members.map((m) => (
-                             <tr key={m.id}>
+                    <tr key={m.id}>
                       <td>
                         {m.photo ? (
                           <img src={m.photo} className="profile-photo rounded-circle" alt="" style={{ width: 40, height: 40, objectFit: "cover" }} />
@@ -749,7 +749,7 @@ export default function DashboardPage() {
                         <td className="text-success">{formatPeso(l.totalPaid)}</td>
                         <td className="text-danger fw-bold">{formatPeso(l.balance)}</td>
                         <td>
-                            <span className={l.status === "active" ? "badge badge-active" : "badge badge-paid"}>
+                          <span className={l.status === "active" ? "badge badge-active" : "badge badge-paid"}>
                             {l.status.toUpperCase()}
                           </span>
                         </td>
@@ -1098,7 +1098,7 @@ export default function DashboardPage() {
                   <div className="col-12">
                     <label className="form-label fw-semibold">SELECT MEMBER</label>
                     <select
-                      className="form-select"
+                               className="form-select"
                       value={loanForm.memberId}
                       onChange={(e) => setLoanForm({ ...loanForm, memberId: e.target.value })}
                     >
@@ -1140,7 +1140,7 @@ export default function DashboardPage() {
                 )}
 
                 <div className="col-md-4">
-                        <label className="form-label fw-semibold">LOAN AMOUNT</label>
+                  <label className="form-label fw-semibold">LOAN AMOUNT</label>
                   <div className="input-group">
                     <span className="input-group-text">â±</span>
                     <input
@@ -1315,7 +1315,7 @@ export default function DashboardPage() {
   return (
     <div style={{ minHeight: "100vh" }}>
       {renderSidebar()}
-      <div className="main-content" style={{ marginLeft: sidebarOpen ? 240 : 0 }}>
+      <div className="main-content" style={{ marginLeft: 0 }}>
         {renderTopBar()}
         {renderCurrentPage()}
       </div>
