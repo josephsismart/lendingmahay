@@ -1414,7 +1414,7 @@ export default function DashboardPage() {
                 const firstActive = loans.find((l) => l.status === "active");
                 if (firstActive) {
                   setPaymentLoanId(firstActive.id);
-                  setPaymentAmount("");
+                  setPaymentAmount(0);
                   setShowPaymentModal(true);
                 }
               }}
