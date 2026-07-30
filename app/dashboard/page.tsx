@@ -413,6 +413,7 @@ export default function DashboardPage() {
     { page: "dashboard", icon: "fa-tachometer-alt", label: "DASHBOARD" },
     { page: "shareholders", icon: "fa-users", label: "SHAREHOLDERS" },
     { page: "loans", icon: "fa-hand-holding-usd", label: "LOANS" },
+    { page: "payments" as Page, icon: "fa-money-bill-wave", label: "PAYMENTS" },
     { page: "accounting", icon: "fa-calculator", label: "ACCOUNTING" },
   ];
 
