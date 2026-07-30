@@ -57,6 +57,10 @@ body {
   flex-direction: column;
   overflow: hidden;
   border-right: none;
+  transform: translateX(-100%);
+}
+.sidebar.show {
+  transform: translateX(0);
 }
 
 .sidebar-brand {
@@ -381,7 +385,7 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* =========== SUMMARY ROW ========== */
+/* ========== SUMMARY ROW ========== */
 .summary-row {
   display: flex;
   justify-content: space-between;
@@ -461,14 +465,6 @@ body {
 }
 
 @media (max-width: 767.98px) {
-  .sidebar {
-    transform: translateX(-100%);
-    width: 240px !important;
-  }
-  .sidebar.show {
-    transform: translateX(0);
-  }
-
   .main-content {
     margin-left: 0 !important;
     padding: 14px !important;
@@ -541,8 +537,6 @@ body {
   background: rgba(0,0,0,0.4);
   z-index: 999;
 }
-@media (max-width: 768px) {
-  .sidebar-overlay.show {
-    display: block;
-  }
+.sidebar-overlay.show {
+  display: block;
 }
