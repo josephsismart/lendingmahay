@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface Member {
   id: string;
@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentLoanId, setPaymentLoanId] = useState("");
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [expandedLoanId, setExpandedLoanId] = useState<string | null>(null);
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -739,8 +740,10 @@ export default function DashboardPage() {
                       l.borrowerType === "non-member"
                         ? `(NON-MEMBER) ${l.borrowerName.toUpperCase()} - TAGGED TO: ${getMemberName(l.taggedMemberId)}`
                         : l.borrowerName.toUpperCase();
+                    const isExpanded = expandedLoanId === l.id;
                     return (
-                      <tr key={l.id}>
+                      <React.Fragment key={l.id}>
+                      <tr>
                         <td className="fw-semibold">{borrowerDisplay}</td>
                         <td>{formatPeso(l.amount)}</td>
                         <td>{new Date(l.borrowDate).toLocaleDateString("en-PH").toUpperCase()}</td>
@@ -755,6 +758,15 @@ export default function DashboardPage() {
                         </td>
                         <td>
                           <div className="d-flex gap-1 flex-wrap">
+                            {l.payments.length > 0 && (
+                              <button
+                                className={`btn btn-sm ${isExpanded ? "btn-info" : "btn-outline-info"}`}
+                                onClick={() => setExpandedLoanId(isExpanded ? null : l.id)}
+                                title="VIEW PAYMENTS"
+                              >
+                                <i className="fas fa-history"></i>
+                              </button>
+                            )}
                             {l.status === "active" && (
                               <>
                                 <button
@@ -782,6 +794,36 @@ export default function DashboardPage() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && l.payments.length > 0 && (
+                        <tr>
+                          <td colSpan={9} className="p-0">
+                            <div className="bg-light p-3" style={{ borderLeft: "4px solid #0d6efd" }}>
+                              <div className="fw-bold mb-2"><i className="fas fa-history me-2"></i>PAYMENT HISTORY ({l.payments.length})</div>
+                              <table className="table table-sm table-bordered mb-0 bg-white">
+                                <thead>
+                                  <tr className="table-secondary">
+                                    <th>#</th>
+                                    <th>AMOUNT PAID</th>
+                                    <th>DATE PAID</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {l.payments
+                                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                    .map((p, i) => (
+                                    <tr key={p.id}>
+                                      <td>{i + 1}</td>
+                                      <td className="text-success fw-bold">{formatPeso(p.amount)}</td>
+                                      <td>{new Date(p.date).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }).toUpperCase()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                 </tbody>
